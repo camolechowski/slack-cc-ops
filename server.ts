@@ -18,7 +18,7 @@ import { App } from '@slack/bolt'
 import { randomBytes } from 'crypto'
 import {
   readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync,
-  statSync, renameSync, realpathSync, chmodSync,
+  statSync, renameSync, realpathSync, chmodSync, unlinkSync,
 } from 'fs'
 import { homedir } from 'os'
 import { join, sep, extname, basename } from 'path'
@@ -28,6 +28,7 @@ const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
 const INBOX_DIR = join(STATE_DIR, 'inbox')
+const LOCK_FILE = join(STATE_DIR, 'plugin.lock')
 
 const MAX_CHUNK_LIMIT = 3900
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
@@ -54,6 +55,50 @@ if (!BOT_TOKEN || !APP_TOKEN) {
   )
   process.exit(1)
 }
+
+// Singleton lock — Slack Socket Mode delivers each event to exactly one
+// connected consumer. Running multiple plugin processes against the same bot
+// token splits inbound events randomly across them, causing missed messages in
+// every consumer but one. The lock at STATE_DIR/plugin.lock ensures only one
+// live process binds to Slack at a time.
+function acquirePluginLock(): void {
+  try {
+    const existing = readFileSync(LOCK_FILE, 'utf8').trim()
+    const heldPid = parseInt(existing, 10)
+    if (Number.isFinite(heldPid) && heldPid > 0 && heldPid !== process.pid) {
+      try {
+        process.kill(heldPid, 0)
+        process.stderr.write(
+          `slack channel: another instance (PID ${heldPid}) already holds ${LOCK_FILE}\n` +
+          `  this instance (PID ${process.pid}) will exit — Socket Mode is single-consumer,\n` +
+          `  and running multiple plugin processes causes event fanout + missed messages.\n` +
+          `  if you believe the lock is stale, remove ${LOCK_FILE} and retry.\n`,
+        )
+        process.exit(0)
+      } catch {
+        process.stderr.write(`slack channel: stale lock from PID ${heldPid}, reclaiming\n`)
+      }
+    }
+  } catch {
+    // no lock file, or unreadable — proceed
+  }
+  try {
+    mkdirSync(STATE_DIR, { recursive: true })
+    writeFileSync(LOCK_FILE, String(process.pid), 'utf8')
+  } catch (err) {
+    process.stderr.write(`slack channel: failed to write lock ${LOCK_FILE}: ${err}\n`)
+    process.exit(1)
+  }
+}
+
+function releasePluginLock(): void {
+  try {
+    const existing = readFileSync(LOCK_FILE, 'utf8').trim()
+    if (parseInt(existing, 10) === process.pid) unlinkSync(LOCK_FILE)
+  } catch {}
+}
+
+acquirePluginLock()
 
 type PendingEntry = {
   senderId: string
@@ -775,6 +820,37 @@ slackApp.event('message', async ({ event }) => {
   )
 })
 
+// Handle being added to a channel — triggers self-service onboarding for unrouted channels
+slackApp.event('member_joined_channel', async ({ event }) => {
+  if (event.user !== botUserId) return
+
+  const channelId = event.channel
+
+  let isRouted = false
+  try {
+    const routes = JSON.parse(readFileSync(join(STATE_DIR, 'routes.json'), 'utf8'))
+    isRouted = channelId in routes
+  } catch {}
+  if (isRouted) return
+
+  try {
+    await slackApp!.client.chat.postMessage({
+      channel: channelId,
+      text: [
+        `:wave: Hi, I'm *ClaudeBot*. I've been added to this channel but I'm not configured for it yet.`,
+        ``,
+        `When you're ready, an authorized user can set me up by mentioning me with the word \`onboard\`:`,
+        ``,
+        `> <@${botUserId}> onboard`,
+        ``,
+        `I'll walk you through connecting this channel to a local folder or GitHub repo so I can start helping here.`,
+      ].join('\n'),
+    })
+  } catch (err) {
+    process.stderr.write(`slack channel: failed to send onboarding greeting to ${channelId}: ${err}\n`)
+  }
+})
+
 // Handle permission button clicks
 slackApp.action(/^perm:(allow|deny|more):/, async ({ action, ack, respond }) => {
   await ack()
@@ -821,6 +897,7 @@ function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
   process.stderr.write('slack channel: shutting down\n')
+  releasePluginLock()
   setTimeout(() => process.exit(0), 2000)
   void slackApp?.stop().finally(() => process.exit(0))
 }
