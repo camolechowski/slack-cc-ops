@@ -15,7 +15,14 @@ RUN apk add --no-cache \
 # platform packages) lands under a world-readable path. Default $HOME/.bun
 # puts the real binary under /root/.bun which is mode 700 — the symlink in
 # /usr/local/bin/claude resolves but the target isn't reachable by non-root.
-RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code
+#
+# Bun's install also creates /usr/local/bin/claude pointing at the glibc
+# variant (claude-code-linux-arm64/claude). Alpine is musl, so the glibc
+# binary fails to exec ("required file not found"). Re-point at the musl
+# variant after install.
+RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code && \
+    MUSL_BIN="$(find /usr/local/install/global/node_modules/@anthropic-ai -name claude -path '*-musl/claude' | head -1)" && \
+    if [ -n "$MUSL_BIN" ]; then ln -sf "$MUSL_BIN" /usr/local/bin/claude; fi
 
 WORKDIR /app
 
@@ -34,7 +41,7 @@ RUN HOST_DOCKER_GROUP="$(getent group "${DOCKER_GID}" | cut -d: -f1)"; \
       HOST_DOCKER_GROUP=hostdocker; \
     fi && \
     addgroup -g 1001 -S botuser && \
-    adduser -S -D -u 1001 -G botuser botuser && \
+    adduser -S -D -s /bin/bash -u 1001 -G botuser botuser && \
     addgroup botuser "$HOST_DOCKER_GROUP" && \
     mkdir -p /home/botuser /state/claude-config /state/inbox && \
     chown -R botuser:botuser /app /home/botuser /state /usr/local/bin
