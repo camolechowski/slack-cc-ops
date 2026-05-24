@@ -10,7 +10,11 @@ RUN apk add --no-cache \
     git \
     openssh-client
 
-RUN bun install -g @anthropic-ai/claude-code
+# BUN_INSTALL=/usr/local so the global install (and its arch-specific
+# platform packages) lands under a world-readable path. Default $HOME/.bun
+# puts the real binary under /root/.bun which is mode 700 — the symlink in
+# /usr/local/bin/claude resolves but the target isn't reachable by non-root.
+RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code
 
 WORKDIR /app
 
