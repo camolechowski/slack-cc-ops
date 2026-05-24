@@ -1,3 +1,16 @@
+## About this fork
+
+This is a fork of retrodigio/claude-channel-slack customized for Cam + dad's olelabs workspace, deployed as a Docker container on a Mac mini to provide Slack-fronted ops for the BigWin/win platform. Upstream LICENSE and copyright headers retained — see NOTICE.
+
+Differences from upstream:
+
+- Dockerfile and docker-compose hosting for the standalone Mac mini container.
+- `settings.json` uses `bypassPermissions` as the defaultMode, with a PreToolUse Bash hook constraining commands to the `win` CLI.
+- `system-prompts/win-ops.md` provides the principal prompt for the Slack-fronted ops bot.
+- `package.json` is renamed for this project fork.
+
+See `CLAUDE.md` for the repo layout and `scripts/bootstrap-mini.sh` for deploy bootstrap.
+
 # Slack Channel Plugin for Claude Code
 
 Bridge your Slack workspace into a running Claude Code session. DMs and @mentions arrive in your session as channel events, and Claude replies back through Slack using bot messages, reactions, edits, and file uploads. Built for real conversation: each Slack thread gets its own isolated subagent with persistent memory, so parallel conversations don't bleed into each other and you can pick up threads days later with full context intact.

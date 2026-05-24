@@ -1,0 +1,13 @@
+slack-cc-ops
+Copyright 2026 Cameron Olechowski
+
+This product includes software originally developed by:
+
+  Chris Crabtree / retrodigio
+  https://github.com/retrodigio/claude-channel-slack
+  Licensed under the Apache License, Version 2.0
+
+This fork retains upstream copyright headers in each source file where present.
+
+The structural pattern follows Anthropic's official `telegram` channel plugin
+under `claude-plugins-official`.

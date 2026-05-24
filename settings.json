@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "command": "/app/hooks/pretooluse-bash.sh" }
+    ]
+  }
+}

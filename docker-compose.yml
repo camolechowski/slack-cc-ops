@@ -1,0 +1,20 @@
+services:
+  slack-cc-ops:
+    build:
+      context: .
+      args:
+        DOCKER_GID: "${HOST_DOCKER_GID:-999}"
+    image: slack-cc-ops:latest
+    container_name: slack-cc-ops
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./state:/state
+      - ./win:/win:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "test", "-S", "/state/inbox/health.sock"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
