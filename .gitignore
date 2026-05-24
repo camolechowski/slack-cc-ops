@@ -6,4 +6,5 @@ bun.lock
 .letta/
 .win-ops/
 win/
+win-home/
 .DS_Store
