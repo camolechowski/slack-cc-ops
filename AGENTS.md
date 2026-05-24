@@ -43,7 +43,15 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
   - `docker compose ps` shows `slack-cc-ops` as `Up` and `healthy`
   - `docker exec slack-cc-ops tail -40 /state/inbox/server.err` includes `slack channel: connected as`
   - `docker exec slack-cc-ops tmux capture-pane -pt slackcc | tail -40` shows Claude at an interactive prompt instead of a stuck startup screen
+- The Docker healthcheck is intentionally stronger than a plain process probe. It verifies:
+  - Claude is running
+  - the Slack MCP process is running
+  - `git -C /win` can resolve `origin/main`
+  - `docker ps` works from inside the bot container
+  - `win whoami` is still `oauth-active`
+  - at least one successful Slack connection was logged
 - The current image auto-confirms Claude's "Loading development channels" prompt during startup. If startup looks wedged, inspect `scripts/entrypoint.sh` and the tmux pane before assuming Slack is down.
+- For a deeper host-side audit, run `bash scripts/healthcheck.sh` on the mini. It exercises the core operator commands (`git -C /win`, `docker ps`, `win deploy status`, `win doctor show`) in addition to container/process health.
 
 ## Notes discipline
 

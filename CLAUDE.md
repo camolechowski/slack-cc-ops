@@ -105,8 +105,10 @@ All in `scripts/`:
 |-|-|
 | `bootstrap-mini.sh` | One-time setup on a fresh mini |
 | `entrypoint.sh` | Container PID 1 launcher (not run by humans) |
+| `container-healthcheck.sh` | In-container capability healthcheck used by Docker health status |
 | `redeploy.sh` | Pull latest from master + rebuild image + force-recreate + dismiss dev-channel prompt |
 | `restart.sh` | Restart container only (no rebuild) — for prompt-only iteration |
+| `healthcheck.sh` | Host-side end-to-end audit for bot auth, Slack connectivity, core operator commands, beta health, and deploy controller |
 | `logs.sh` | Tail `server.err` + `claude.log` cleanly (ANSI stripped, trigger-filtered) |
 | `exec.sh` | `ssh + docker exec -it` into the container's bash shell |
 

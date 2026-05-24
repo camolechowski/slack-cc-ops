@@ -16,7 +16,7 @@ services:
       - ./win-home:/home/botuser/.win
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'bun.*server.ts' >/dev/null"]
+      test: ["CMD", "bash", "/app/scripts/container-healthcheck.sh"]
       interval: 30s
       timeout: 5s
       retries: 3

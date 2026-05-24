@@ -9,13 +9,49 @@ related: []
 # Container Infrastructure
 
 ## Summary
-This workstream owns the standalone Docker infrastructure for running the slack-cc-ops Claude Code session on the Mac mini. The implementation is based on Cam's `plex-mcp-server` Docker style while adding Claude Code, docker socket access, a persistent `CLAUDE_CONFIG_DIR`, a dedicated `/win` worktree mount, and bootstrap scripts for first-run setup. It now also carries the runtime hardening needed for current Claude builds and Docker Desktop on macOS: the compose healthcheck tracks `bun server.ts`, startup auto-confirms the development-channel prompt, `botuser` is explicitly added to group `0` so `docker` commands work against the mounted socket, and the container mounts the host-side git metadata paths that the `/win` worktree's `.git` file points at so the bot can resolve `origin/main` locally. The next obvious step is to keep deploy/runtime rules centralized in `AGENTS.md` and this note whenever the bot's Mac mini contract changes.
+This workstream owns the standalone Docker infrastructure for running the slack-cc-ops Claude Code session on the Mac mini. The implementation is based on Cam's `plex-mcp-server` Docker style while adding Claude Code, docker socket access, a persistent `CLAUDE_CONFIG_DIR`, a dedicated `/win` worktree mount, and bootstrap scripts for first-run setup. It now also carries the runtime hardening needed for current Claude builds and Docker Desktop on macOS: the container healthcheck proves real operator capability instead of only process presence, startup auto-confirms the development-channel prompt, `botuser` is explicitly added to group `0` so `docker` commands work against the mounted socket, and the container mounts the host-side git metadata paths that the `/win` worktree's `.git` file points at so the bot can resolve `origin/main` locally. The next obvious step is to keep deploy/runtime rules centralized in `AGENTS.md` and this note whenever the bot's Mac mini contract changes.
 
 ## Current open questions
 - [x] ~~Should `scripts/bootstrap-mini.sh` support macOS `stat -f '%g'` as a fallback, or should it stay literal to the brief's Linux-style `stat -c '%g'` command for Docker socket group detection?~~ -> Support both. The script tries the requested `stat -c '%g'` first, then falls back to macOS `stat -f '%g'`, decided 2026-05-23.
 - [x] ~~Is host-side Docker socket GID detection sufficient to make `docker` usable inside the container on the Mac mini?~~ -> No. On Docker Desktop for macOS the mounted socket can still appear as `root:root` inside the container, so the image must also keep `botuser` in group `0`, decided 2026-05-24.
 
 ## Sessions
+
+### 2026-05-24 — session `20260524-6bdbf41-eq0` (agent: codex)
+**Branch / working tree:** `master`
+**Spec ref:** ad-hoc reliability audit for core `win-ops` command paths
+**Files touched:** `scripts/container-healthcheck.sh`, `docker-compose.yml`, `scripts/healthcheck.sh`, `AGENTS.md`, `CLAUDE.md`, `docs/implementation-notes/README.md`, `docs/implementation-notes/container-infrastructure.md`
+
+#### Context loaded
+After the deploy recovery work, Cam asked for a pass over the commands and subcommands most relevant to the bot's real operator duties and whether a separate heartbeat/logging monitor was needed. I audited the live container on the mini and confirmed that the key command paths were currently working: `win whoami`, `win deploy status`, `win doctor show`, `git -C /win rev-parse origin/main`, `docker ps`, and the host-side `scripts/healthcheck.sh`.
+
+#### Design decisions
+- **Strengthen the existing Docker healthcheck instead of adding a new daemon:** The prior healthcheck only checked whether `bun server.ts` existed. That was too weak because the bot could look healthy while lacking Docker access, git worktree access, or WIN auth. I added an in-container `scripts/container-healthcheck.sh` that proves those capabilities directly.
+- **Make the host audit exercise operator commands explicitly:** `scripts/healthcheck.sh` already covered broad runtime status, but it did not clearly prove that the command paths Cam cares about still work. I added a dedicated `core operator commands` section that checks `git -C /win`, `docker ps`, `win deploy status`, and `win doctor show`.
+- **Avoid a standalone heartbeat monitor for now:** With the stronger in-container healthcheck, Docker already marks the bot unhealthy when it loses real operator capability. That gives a low-friction reliability layer without yet adding a separate heartbeat daemon or notification loop.
+
+#### Deviations from spec
+- **No extra monitor service yet:** The user raised heartbeat monitoring as a possibility, but the minimal reliable move was to promote capability checks into the existing healthcheck path first. A separate monitor would add more moving parts before we know we need them.
+
+#### Tradeoffs considered
+- **Process health vs. capability health:** Process-only checks are cheap and quiet, but they miss the exact failures that matter here: broken `/win` metadata mounts, expired WIN auth, missing Docker socket access, and Slack-connect regressions. Capability checks are slightly heavier, but they map to the actual operator contract.
+- **Healthcheck vs. external notification loop:** A cron/launchd/heartbeat notifier could catch issues sooner, but it also increases complexity and alert fatigue. Strengthening the healthcheck keeps the system simpler while still making failures visible through `docker compose ps`, `scripts/healthcheck.sh`, and any future restart policy or alerting built on Docker health.
+
+#### Open questions
+- [ ] If the bot still exhibits long-idle or multi-message degradation after this stronger healthcheck has been live for a while, should we add a failure-only notifier that runs `scripts/healthcheck.sh` periodically and pages only on red status?
+
+#### Footguns and gotchas
+- The stronger container healthcheck relies on live WIN auth and host git metadata mounts. If either of those is intentionally unavailable during maintenance, Docker may temporarily mark the bot unhealthy even if the Claude process itself is still up.
+- `scripts/container-healthcheck.sh` checks `win whoami` for `oauth-active`. If future auth behavior intentionally changes to a different healthy state, this script will need to be updated in lockstep.
+
+#### What shipped this session
+- Added `scripts/container-healthcheck.sh` as an in-container capability healthcheck.
+- Updated Docker health status to use that capability healthcheck instead of a simple `pgrep`.
+- Expanded `scripts/healthcheck.sh` to exercise the core operator command paths explicitly.
+- Documented the stronger health model in `AGENTS.md` and `CLAUDE.md`.
+
+#### What's next
+- Redeploy `slack-cc-ops`, verify the container remains healthy under the stronger healthcheck, and rerun the host-side healthcheck on the mini. If that stays green across a few restart/idle cycles, prefer this over adding a dedicated heartbeat monitor.
 
 ### 2026-05-24 — session `20260524-6660dc8-s2v` (agent: codex)
 **Branch / working tree:** `master`

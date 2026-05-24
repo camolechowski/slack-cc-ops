@@ -63,10 +63,49 @@ if [ -n "$CONTAINER_STATE" ]; then
     warn "Bolt last status: $BOLT_LAST"
   fi
 
+  if docker exec slack-cc-ops bash /app/scripts/container-healthcheck.sh >/dev/null 2>&1; then
+    ok "container capability healthcheck passed"
+  else
+    fail "container capability healthcheck failed (docker/git/auth/slack capability regression)"
+  fi
+
 fi
 
 # -----------------------------------------------------------------------------
-section "3. WIN auth (Scott)"
+section "3. core operator commands"
+
+if [ -n "$CONTAINER_STATE" ]; then
+  MAIN_SHA="$(docker exec slack-cc-ops sh -lc 'git -C /win rev-parse --short origin/main' 2>/dev/null || true)"
+  if [ -n "$MAIN_SHA" ]; then
+    ok "git -C /win rev-parse origin/main: $MAIN_SHA"
+  else
+    fail "git -C /win rev-parse origin/main failed"
+  fi
+
+  if docker exec slack-cc-ops sh -lc 'docker ps >/dev/null' 2>/dev/null; then
+    ok "docker ps works inside the bot container"
+  else
+    fail "docker ps failed inside the bot container"
+  fi
+
+  DEPLOY_STATUS="$(docker exec slack-cc-ops sh -lc 'win deploy status --json' 2>/dev/null || true)"
+  if echo "$DEPLOY_STATUS" | grep -q '"name"[[:space:]]*:[[:space:]]*"beta"' && \
+     echo "$DEPLOY_STATUS" | grep -q '"name"[[:space:]]*:[[:space:]]*"staging"'; then
+    ok "win deploy status returned beta + staging entries"
+  else
+    fail "win deploy status did not return expected beta/staging entries"
+  fi
+
+  DOCTOR_SHOW="$(docker exec slack-cc-ops sh -lc 'win doctor show --json' 2>/dev/null || true)"
+  if echo "$DOCTOR_SHOW" | grep -q '"api-health"' && echo "$DOCTOR_SHOW" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+    ok "win doctor show returned healthy diagnostics"
+  else
+    fail "win doctor show did not return healthy diagnostics"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+section "4. WIN auth (Scott)"
 
 if [ -n "$CONTAINER_STATE" ]; then
   WHOAMI="$(docker exec slack-cc-ops sh -c 'cd /win && win whoami' 2>/dev/null)"
@@ -91,7 +130,7 @@ if [ -n "$CONTAINER_STATE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-section "4. Slack identity"
+section "5. Slack identity"
 
 if [ -n "$CONTAINER_STATE" ]; then
   SLACK_AUTH="$(docker exec slack-cc-ops sh -c 'curl -sS --max-time 5 -H "Authorization: Bearer $SLACK_BOT_TOKEN" https://slack.com/api/auth.test' 2>/dev/null)"
@@ -105,7 +144,7 @@ if [ -n "$CONTAINER_STATE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-section "5. win-live runtime (beta)"
+section "6. win-live runtime (beta)"
 
 # Public beta endpoint
 BETA_HEALTH="$(curl -sS --max-time 5 https://bigwinbeta.olelabs.xyz/api/health 2>/dev/null)"
@@ -129,7 +168,7 @@ for svc in postgres redis minio server kernel daemon proxy dashboard; do
 done
 
 # -----------------------------------------------------------------------------
-section "6. deploy controller"
+section "7. deploy controller"
 
 CTL_PID="$(lsof -nP -iTCP:9475 2>/dev/null | awk 'NR==2{print $2}')"
 if [ -n "$CTL_PID" ]; then
