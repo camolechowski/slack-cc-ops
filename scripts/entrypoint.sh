@@ -123,6 +123,20 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 
 tmux new-session -d -s "$SESSION" -x 240 -y 60 "$LAUNCH_SCRIPT"
 
+# Newer Claude builds prompt for confirmation before loading development
+# channels. The default selection is the safe "local development" option, so
+# acknowledge it automatically until the channel MCP is actually alive.
+for _ in 1 2 3 4 5 6 7 8; do
+  if pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
+    break
+  fi
+  if tmux capture-pane -pt "$SESSION" 2>/dev/null | grep -q "Loading development channels"; then
+    echo "[slack-cc-ops] Confirming Claude development-channel prompt"
+    tmux send-keys -t "$SESSION" Enter
+  fi
+  sleep 2
+done
+
 # Mirror pane output to a log file -> docker logs (via PID 1 stdout).
 tmux pipe-pane -o -t "$SESSION" "cat >> $LOG"
 tail -F "$LOG" &

@@ -35,6 +35,11 @@ COPY . .
 # If the host's docker GID already exists in the image (e.g. on Mac
 # Desktop the socket is gid 1 == bin), add botuser to that existing
 # group instead of creating a new 'hostdocker' group.
+#
+# On Docker Desktop for macOS, the mounted socket can still present inside the
+# container as root:root (gid 0) even when the host-side stat looks different.
+# Keep botuser in group 0 as well or every `docker ...` call from the bot will
+# fail with "permission denied while trying to connect to the Docker daemon".
 RUN HOST_DOCKER_GROUP="$(getent group "${DOCKER_GID}" | cut -d: -f1)"; \
     if [ -z "$HOST_DOCKER_GROUP" ]; then \
       addgroup -g "${DOCKER_GID}" -S hostdocker; \
@@ -43,6 +48,7 @@ RUN HOST_DOCKER_GROUP="$(getent group "${DOCKER_GID}" | cut -d: -f1)"; \
     addgroup -g 1001 -S botuser && \
     adduser -S -D -s /bin/bash -u 1001 -G botuser botuser && \
     addgroup botuser "$HOST_DOCKER_GROUP" && \
+    addgroup botuser root && \
     mkdir -p /home/botuser /state/claude-config /state/inbox && \
     chown -R botuser:botuser /app /home/botuser /state /usr/local/bin
 

@@ -13,6 +13,13 @@ cd "$PROJECT_DIR"
 
 log() { echo "[redeploy] $*"; }
 
+if ! git diff --quiet --ignore-submodules HEAD --; then
+  log "tracked files are dirty; refusing to pull over local changes"
+  git status --short
+  log "commit, stash, or discard the tracked edits first, then rerun redeploy.sh"
+  exit 1
+fi
+
 log "1/6 pulling latest master from origin"
 git pull --ff-only origin master 2>&1 | tail -5
 

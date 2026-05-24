@@ -1,5 +1,7 @@
 # slack-cc-ops — repo handbook
 
+`AGENTS.md` is the short operational checklist for future agents. Read that first if you need the fast path; use this file for the full architecture and file-level handbook.
+
 > For future engineers (human or AI) working **on this repo** — bot code, container, deploy scripts, system prompt.
 > If you're looking for the bot's **operational instructions**, read `system-prompts/win-ops.md`. That's what the running bot sees.
 
