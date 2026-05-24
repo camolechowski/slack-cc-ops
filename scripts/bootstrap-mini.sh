@@ -51,9 +51,20 @@ if [[ ! -d "$WIN_LIVE/.git" ]] && [[ ! -f "$WIN_LIVE/.git" ]]; then
   exit 1
 fi
 
+# `main` is typically already checked out in another worktree on the mini.
+# Use a dedicated branch for the bot so multiple worktrees can coexist.
+# To sync the bot to latest main: cd into ./win and run
+#   git fetch && git reset --hard origin/main
+WORKTREE_BRANCH="${WORKTREE_BRANCH:-slack-cc-ops-bot}"
+
 if [[ ! -e "$WIN_WORKTREE_DIR" ]]; then
-  log "Creating win worktree at $WIN_WORKTREE_DIR (tracking main)"
-  git -C "$WIN_LIVE" worktree add "$WIN_WORKTREE_DIR" main
+  if git -C "$WIN_LIVE" rev-parse --verify "$WORKTREE_BRANCH" >/dev/null 2>&1; then
+    log "Branch $WORKTREE_BRANCH already exists in $WIN_LIVE; checking it out at $WIN_WORKTREE_DIR"
+    git -C "$WIN_LIVE" worktree add "$WIN_WORKTREE_DIR" "$WORKTREE_BRANCH"
+  else
+    log "Creating branch $WORKTREE_BRANCH from main at $WIN_WORKTREE_DIR"
+    git -C "$WIN_LIVE" worktree add -b "$WORKTREE_BRANCH" "$WIN_WORKTREE_DIR" main
+  fi
   log "Running bun install in the worktree"
   (cd "$WIN_WORKTREE_DIR" && bun install)
 else
