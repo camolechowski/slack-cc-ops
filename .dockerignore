@@ -1,6 +1,8 @@
 node_modules
 state/
+win/
 .env
 .git
 *.log
 .DS_Store
+docs/
