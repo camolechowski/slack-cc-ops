@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Non-interactive SSH sessions don't source ~/.zshrc, so add bun to PATH explicitly.
+export PATH="$HOME/.bun/bin:$PATH"
+
 # Bootstrap slack-cc-ops on the Mac mini.
 #
 # Expected layout:
@@ -65,10 +68,15 @@ if [[ ! -e "$WIN_WORKTREE_DIR" ]]; then
     log "Creating branch $WORKTREE_BRANCH from main at $WIN_WORKTREE_DIR"
     git -C "$WIN_LIVE" worktree add -b "$WORKTREE_BRANCH" "$WIN_WORKTREE_DIR" main
   fi
+else
+  log "Using existing win worktree at $WIN_WORKTREE_DIR"
+fi
+
+if [[ ! -d "$WIN_WORKTREE_DIR/node_modules" ]]; then
   log "Running bun install in the worktree"
   (cd "$WIN_WORKTREE_DIR" && bun install)
 else
-  log "Using existing win worktree at $WIN_WORKTREE_DIR"
+  log "node_modules present in worktree; skipping bun install"
 fi
 
 export HOST_DOCKER_GID="${HOST_DOCKER_GID:-$(detect_docker_gid)}"
