@@ -8,7 +8,8 @@ RUN apk add --no-cache \
     docker-cli \
     dumb-init \
     git \
-    openssh-client
+    openssh-client \
+    tmux
 
 # BUN_INSTALL=/usr/local so the global install (and its arch-specific
 # platform packages) lands under a world-readable path. Default $HOME/.bun
