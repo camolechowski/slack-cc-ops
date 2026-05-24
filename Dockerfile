@@ -52,8 +52,11 @@ ENV NODE_ENV=production
 
 USER botuser
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD test -S /state/inbox/health.sock || exit 1
+# Healthcheck verifies BOTH that the channel server socket file is present
+# (server.ts wrote it) AND that the bun process is still alive (the socket
+# file persists if bun crashes, giving false-green otherwise).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD test -S /state/inbox/health.sock && pgrep -f "bun.*server.ts" >/dev/null || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["bash", "/app/scripts/entrypoint.sh"]

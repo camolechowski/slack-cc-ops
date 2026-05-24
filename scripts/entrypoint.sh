@@ -128,11 +128,22 @@ tmux pipe-pane -o -t "$SESSION" "cat >> $LOG"
 tail -F "$LOG" &
 TAIL_PID=$!
 
-# Block until tmux session goes away.
+# Liveness loop — exit (and let compose restart us) when ANY of:
+#   - tmux session dies (claude crashed)
+#   - bun server.ts dies (MCP channel server crashed; tmux/claude may be
+#     up but the bot can't receive Slack events without this)
+#
+# Give bun server.ts a few seconds to start up before we begin enforcing.
+sleep 30
+
 while tmux has-session -t "$SESSION" 2>/dev/null; do
-  sleep 5
+  if ! pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
+    echo "[slack-cc-ops] bun server.ts (the channel MCP) is no longer running — exiting so compose restarts the container"
+    break
+  fi
+  sleep 10
 done
 
 kill "$TAIL_PID" 2>/dev/null || true
-echo "[slack-cc-ops] tmux session ended — exiting so compose can restart"
+echo "[slack-cc-ops] liveness loop exiting at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 exit 1
