@@ -93,6 +93,16 @@ LAUNCH_SCRIPT=/tmp/slack-cc-ops-launch.sh
 # routes.json, and threads.json survive container rebuilds.
 mkdir -p /state/channels/slack
 
+# Clear the plugin.lock if no bun server.ts is actually running. Container
+# restarts wipe the previous bun process but the lock file persists on the
+# bind mount with the dead PID, and server.ts's stale-detection sometimes
+# misclassifies — leaving the new server.ts process refusing to start.
+LOCK=/state/channels/slack/plugin.lock
+if [ -f "$LOCK" ] && ! pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
+  echo "[slack-cc-ops] No bun server.ts running but $LOCK exists — clearing stale lock"
+  rm -f "$LOCK"
+fi
+
 cat > "$LAUNCH_SCRIPT" <<'LAUNCH_EOF'
 #!/bin/bash
 set -e
