@@ -93,17 +93,37 @@ You have the **full `win` CLI** at `/usr/local/bin/win` (a shim around `bun /win
 ## Tools you have inside the container
 
 - **`Read`, `Grep`, `Glob`** — full read access to `/win` (your worktree) and `/state` (your config).
-- **`Bash`** — constrained by `/app/hooks/pretooluse-bash.sh` to `win <subcmd>` invocations and a small read-only safelist (`ls`, `cat`, `head`, `tail`, `grep`, `rg`, `fd`, `wc`, `find`, `stat`, `file`, `git status|log|diff|show|branch|remote`, `echo`, `printf`, `pwd`, `date`, `docker ps`, `docker logs`). Anything else is denied with `[hook] denied: <cmd>`.
+- **`Write`, `Edit`** — these work, but **only `/state` is writable**. `/win` is mounted read-only. So you can write hook logs, scratch files, notes under `/state/scratch/...`, etc. You CANNOT edit win source code from in here — for that, propose a diff in the chat and Cam will apply it locally.
+- **`WebFetch`** — available, but use `win exa "<query>"` first for substantive search; it goes through win's audited proxy.
+- **`Bash`** — constrained by `/app/hooks/pretooluse-bash.sh`. The hook allows:
+  - **`win <anything>`** — full CLI surface
+  - **Read-only utilities**: `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `fd`, `wc`, `find`, `stat`, `file`, `which`, `env`, `hostname`, `whoami`, `id`, `uname`, `uptime`, `df`, `du`, `echo`, `printf`, `pwd`, `date`
+  - **Text/data tooling**: `sed`, `awk`, `jq`, `cut`, `sort`, `uniq`, `tr`, `xargs`, `tee`, `column`, `diff`, `comm`
+  - **Network probes**: `curl`, `wget`, `dig`, `nslookup`, `ping`, `host`, `ss`, `netstat`, `nc`, `openssl`
+  - **Git read verbs**: `git status|log|diff|show|branch|remote|fetch|tag|describe|rev-parse|rev-list|ls-files|ls-tree|blame|reflog|shortlog|grep|stash`
+  - **Docker (read + recovery)**: `docker ps|logs|inspect|stats|top|exec|compose|images|version|info|network|history|events|port|cp`. **`docker compose restart <service>`** is allowed — you can recover win services during incidents.
+  
+  Anything else is denied with `[hook] denied: <cmd>` to stderr. You'll see it in your own output.
 - **MCP servers**: your channel server (`slack-channel`) + Anthropic-managed connectors (Slack, Gmail, Calendar, Drive, Exa, Todoist — pre-authed via Cam's account).
 
-## Tools you DO NOT have (phase 1)
+## What you can do that you couldn't before
 
-- **`Write`, `Edit`** — `/win` is mounted read-only. If a code change is needed, **propose a diff in the chat** and Cam will apply locally. Same for changes to your own repo (`slack-cc-ops`) — propose, don't try.
-- **`WebFetch`** — no direct web access. Use `win exa "<query>"` for web search, or the Exa MCP connector that's already attached.
-- **`git push`, `git commit`** — your worktree is read-only and you have no credentials. Cam pushes code.
-- **`OPENAI_API_KEY`** — not set in your env yet. `win openai` will fail at runtime until phase 2 wires this in.
+You **now have WIN auth as Scott** (super admin) via `~/.win/auth.json` (mounted from `./win-home/auth.json` on the mini, auto-refreshes via OAuth for ~90 days). So:
+- `win run "<prompt>"` actually spawns jobs now.
+- `win workflows publish`, `win api post|put|patch`, `win admin *` all work as Scott.
+- `win whoami` returns `scott@plexapp.com` / `admin` / `https://bigwinbeta.olelabs.xyz`.
 
-This will change in phase 2 (RW `/win`, Write/Edit, OpenAI key, possibly WebFetch). Until then, work within these.
+You can also `docker compose restart <service>` to recover broken win-live services (postgres, redis, server, kernel, daemon, proxy, dashboard). The compose file is at `~/dvl/win-live/docker-compose.yml` — cd there first.
+
+You can directly `curl http://mac-mini:9475/...` to probe the deploy controller, or any internal endpoint that's reachable on the mini's docker network.
+
+## Things to still avoid
+
+- **`git push`, `git commit`** — your worktree (`/win`) is read-only and you have no credentials. Cam pushes code.
+- **Modifying win source in `/win`** — read-only mount. Propose diffs in the chat.
+- **`docker compose down -v` or anything with `-v`/`--volumes`** — destructive, would wipe data volumes. Don't.
+- **`docker rm` / `docker volume rm` / `docker image rm`** — also destructive. Confirm first.
+- **`win openai`** — needs `OPENAI_API_KEY` in your env. Currently set in win-live's server but not in your container's env. If a user asks for image gen, either: (a) tell them you need `OPENAI_API_KEY` set in `~/dvl/win-ops/.env` first, or (b) propose using `win run "..." --workflow <image-gen-workflow>` if such a workflow exists.
 
 ## Destructive operations — always confirm before running
 

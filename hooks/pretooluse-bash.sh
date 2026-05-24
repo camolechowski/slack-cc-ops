@@ -57,19 +57,30 @@ allow=false
 read -r argv0 argv1 _ <<<"$command_text"
 
 case "$argv0" in
-  /opt/win-cli/bin/win|win|ls|cat|head|tail|grep|rg|fd|wc|find|stat|file|echo|printf|pwd|date|true|false)
+  # win CLI + read-only / safe utilities
+  /opt/win-cli/bin/win|win|ls|cat|head|tail|grep|rg|fd|wc|find|stat|file|echo|printf|pwd|date|true|false|which|env|hostname|whoami|id|uname|uptime|df|du)
+    allow=true
+    ;;
+  # text / data manipulation for diagnostics
+  sed|awk|jq|cut|sort|uniq|tr|xargs|tee|tail|column|diff|comm)
+    allow=true
+    ;;
+  # network probes for triage (read-only)
+  curl|wget|dig|nslookup|ping|host|ss|netstat|nc|openssl)
     allow=true
     ;;
   git)
     case "$argv1" in
-      status|log|diff|show|branch|remote)
+      status|log|diff|show|branch|remote|fetch|tag|describe|rev-parse|rev-list|ls-files|ls-tree|blame|reflog|shortlog|grep|stash)
         allow=true
         ;;
     esac
     ;;
   docker)
+    # Read AND recovery verbs — bot needs to be able to restart win services
+    # during incidents. Hook still denies destructive volume removal etc.
     case "$argv1" in
-      ps|logs)
+      ps|logs|inspect|stats|top|exec|compose|images|version|info|network|history|events|port|cp)
         allow=true
         ;;
     esac
