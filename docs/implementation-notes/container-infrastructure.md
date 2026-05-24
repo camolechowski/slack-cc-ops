@@ -9,13 +9,45 @@ related: []
 # Container Infrastructure
 
 ## Summary
-This workstream owns the standalone Docker infrastructure for running the slack-cc-ops Claude Code session on the Mac mini. The implementation is based on Cam's `plex-mcp-server` Docker style while adding Claude Code, docker socket access, a persistent `CLAUDE_CONFIG_DIR`, a dedicated `/win` worktree mount, and bootstrap scripts for first-run setup. It now also carries the runtime hardening needed for current Claude builds and Docker Desktop on macOS: the compose healthcheck tracks `bun server.ts`, startup auto-confirms the development-channel prompt, and `botuser` is explicitly added to group `0` so `docker` commands work against the mounted socket. The next obvious step is to keep deploy/runtime rules centralized in `AGENTS.md` and this note whenever the bot's Mac mini contract changes.
+This workstream owns the standalone Docker infrastructure for running the slack-cc-ops Claude Code session on the Mac mini. The implementation is based on Cam's `plex-mcp-server` Docker style while adding Claude Code, docker socket access, a persistent `CLAUDE_CONFIG_DIR`, a dedicated `/win` worktree mount, and bootstrap scripts for first-run setup. It now also carries the runtime hardening needed for current Claude builds and Docker Desktop on macOS: the compose healthcheck tracks `bun server.ts`, startup auto-confirms the development-channel prompt, `botuser` is explicitly added to group `0` so `docker` commands work against the mounted socket, and the container mounts the host-side git metadata paths that the `/win` worktree's `.git` file points at so the bot can resolve `origin/main` locally. The next obvious step is to keep deploy/runtime rules centralized in `AGENTS.md` and this note whenever the bot's Mac mini contract changes.
 
 ## Current open questions
 - [x] ~~Should `scripts/bootstrap-mini.sh` support macOS `stat -f '%g'` as a fallback, or should it stay literal to the brief's Linux-style `stat -c '%g'` command for Docker socket group detection?~~ -> Support both. The script tries the requested `stat -c '%g'` first, then falls back to macOS `stat -f '%g'`, decided 2026-05-23.
 - [x] ~~Is host-side Docker socket GID detection sufficient to make `docker` usable inside the container on the Mac mini?~~ -> No. On Docker Desktop for macOS the mounted socket can still appear as `root:root` inside the container, so the image must also keep `botuser` in group `0`, decided 2026-05-24.
 
 ## Sessions
+
+### 2026-05-24 — session `20260524-6660dc8-s2v` (agent: codex)
+**Branch / working tree:** `master`
+**Spec ref:** ad-hoc operator follow-up about answering `HEAD of main` vs deployed SHAs
+**Files touched:** `docker-compose.yml`, `AGENTS.md`, `CLAUDE.md`, `docs/implementation-notes/README.md`, `docs/implementation-notes/container-infrastructure.md`
+
+#### Context loaded
+After the bot redeploy and beta recovery, Cam asked why the bot still could not answer "what commit is on HEAD of main and what's deployed on beta and staging?" I inspected `/win` inside the running container and found that the files were mounted, but `git -C /win` failed because `/win/.git` points to an absolute host path under `/Users/superpea/dvl/win/.git/worktrees/win`, which did not exist inside the container.
+
+#### Design decisions
+- **Mount host-style git metadata paths verbatim:** Rather than replacing the worktree with a separate clone, I added read-only bind mounts for the exact absolute paths git expects: `./win -> /Users/superpea/dvl/win-ops/win` and `/Users/superpea/dvl/win -> /Users/superpea/dvl/win`. This makes the existing `/win` worktree usable in-container with the least disruption.
+- **Document the worktree trap explicitly:** The failure looked like a broken git checkout or missing `GH_TOKEN`, but the real issue was missing worktree metadata mounts. I added this to `AGENTS.md` and `CLAUDE.md` so future agents do not misdiagnose it.
+
+#### Deviations from spec
+- **Host-specific absolute path mounts:** The compose file now encodes the Mac mini's concrete host paths because this repo targets one known deployment. A more portable design would avoid host-specific absolute paths, but portability matters less here than making the live bot answer core ops questions reliably.
+
+#### Tradeoffs considered
+- **Worktree metadata mounts vs. standalone clone:** Considered replacing `./win` with a plain clone to avoid absolute-path gitdir pointers. I kept the worktree because it already exists in the bootstrap flow, shares objects efficiently with the host repo, and only needed two additional read-only mounts to become usable inside the container.
+
+#### Open questions
+- None.
+
+#### Footguns and gotchas
+- Mounting `./win` alone is not enough for git commands inside the container when the directory is a worktree. The companion metadata mounts are part of the contract now.
+- If the host-side source repo path ever moves away from `/Users/superpea/dvl/win`, the container mounts and the worktree pointer must be updated together.
+
+#### What shipped this session
+- Added the host-side worktree metadata mounts needed for `git -C /win` to resolve `origin/main` inside the container.
+- Documented the `/win` worktree metadata requirement in both `AGENTS.md` and `CLAUDE.md`.
+
+#### What's next
+- Rebuild/redeploy `slack-cc-ops`, then verify that `git -C /win rev-parse origin/main` works inside the container and that the bot can answer the `HEAD of main / deployed beta / deployed staging` question directly.
 
 ### 2026-05-24 — session `20260524-7c762c6-rca` (agent: codex)
 **Branch / working tree:** `master`

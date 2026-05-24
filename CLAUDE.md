@@ -49,7 +49,7 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 
 ### Our fork-specific files
 - `Dockerfile` — `oven/bun:1-alpine` base, installs claude code globally via `BUN_INSTALL=/usr/local`, re-symlinks the musl variant of claude (Alpine quirk), adds `bash`/`git`/`docker-cli`/`tmux`. Botuser shell is `/bin/bash` (NOT nologin — tmux needs a real shell).
-- `docker-compose.yml` — single-service stack named `slack-cc-ops`. Bind-mounts `./state`, `./win`, `/var/run/docker.sock`. No public ports (Socket Mode is outbound-only).
+- `docker-compose.yml` — single-service stack named `slack-cc-ops`. Bind-mounts `./state`, `./win`, the host-side git metadata paths that the `/win` worktree points at, and `/var/run/docker.sock`. No public ports (Socket Mode is outbound-only).
 - `scripts/entrypoint.sh` — symlinks `/app/settings.json` into `$CLAUDE_CONFIG_DIR`, creates the `win` shim, pre-seeds `.claude.json` with onboarding bypass + project trust + bypass-permissions acceptance, clears stale `plugin.lock`, launches claude in tmux via `/tmp/slack-cc-ops-launch.sh` (which must be written as a file — inlining via `bash -ic` ate the `--dangerously-load-development-channels` flag).
 - `scripts/bootstrap-mini.sh` — first-run setup on a fresh Mac mini. See below.
 - `scripts/redeploy.sh|restart.sh|logs.sh|exec.sh` — operator quality-of-life (added 2026-05-23).
@@ -68,7 +68,7 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 - `.win-ops/inbox/` — server.err (Bolt's stderr, tee'd), claude.log (tmux pane mirror), health.sock (created by server.ts when Bolt is up — healthcheck reads this).
 - `.win-ops/sessions/` — `${PPID}.json` files from the SessionStart hook.
 
-`./win/` is also gitignored and bind-mounted at `/win:ro`. It's a git worktree of `~/dvl/win-live/` on the `slack-cc-ops-bot` branch off main — the bot's read-only view of the win monorepo.
+`./win/` is also gitignored and bind-mounted at `/win:ro`. It's a git worktree of `~/dvl/win-live/` on the `slack-cc-ops-bot` branch off main — the bot's read-only view of the win monorepo. Because git worktrees store metadata in the source repo's `.git/worktrees/...` directory, the container also bind-mounts the host-style absolute metadata paths (`/Users/superpea/dvl/win-ops/win` and `/Users/superpea/dvl/win`) so `git -C /win ...` works inside the container.
 
 ## Bootstrap on a fresh Mac mini
 

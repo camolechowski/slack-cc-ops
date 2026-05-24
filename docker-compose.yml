@@ -11,6 +11,8 @@ services:
     volumes:
       - ./.win-ops:/state
       - ./win:/win:ro
+      - ./win:/Users/superpea/dvl/win-ops/win:ro
+      - /Users/superpea/dvl/win:/Users/superpea/dvl/win:ro
       - ./win-home:/home/botuser/.win
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:

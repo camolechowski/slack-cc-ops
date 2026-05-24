@@ -32,6 +32,10 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
 - The image must keep `botuser` in group `0` as well as the detected socket group. If not, `docker ps` and `docker exec` fail with `permission denied while trying to connect to the Docker daemon socket`.
 - After touching Docker permissions, validate with:
   - `docker exec slack-cc-ops sh -lc 'id && ls -ln /var/run/docker.sock && docker ps --format "{{.Names}}"'`
+- `/win` is a mounted git worktree, not a plain clone. To let `git -C /win ...` resolve `origin/main`, the container must also mount the host-side worktree metadata paths that `/win/.git` points at:
+  - `./win -> /Users/superpea/dvl/win-ops/win`
+  - `/Users/superpea/dvl/win -> /Users/superpea/dvl/win`
+- If the bot says `/win` is a dangling worktree or "not a git repository," check those companion mounts before reaching for `GH_TOKEN`.
 
 ## Health and validation
 
