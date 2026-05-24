@@ -20,10 +20,17 @@ RUN bun install --frozen-lockfile --production
 
 COPY . .
 
-RUN addgroup -g "${DOCKER_GID}" -S hostdocker && \
+# If the host's docker GID already exists in the image (e.g. on Mac
+# Desktop the socket is gid 1 == bin), add botuser to that existing
+# group instead of creating a new 'hostdocker' group.
+RUN HOST_DOCKER_GROUP="$(getent group "${DOCKER_GID}" | cut -d: -f1)"; \
+    if [ -z "$HOST_DOCKER_GROUP" ]; then \
+      addgroup -g "${DOCKER_GID}" -S hostdocker; \
+      HOST_DOCKER_GROUP=hostdocker; \
+    fi && \
     addgroup -g 1001 -S botuser && \
     adduser -S -D -u 1001 -G botuser botuser && \
-    addgroup botuser hostdocker && \
+    addgroup botuser "$HOST_DOCKER_GROUP" && \
     mkdir -p /home/botuser /state/claude-config /state/inbox && \
     chown -R botuser:botuser /app /home/botuser /state /usr/local/bin
 
