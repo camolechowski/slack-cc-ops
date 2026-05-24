@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "slack-channel": {
-      "command": "bun",
-      "args": ["run", "--cwd", "${CLAUDE_PLUGIN_ROOT}", "--shell=bun", "--silent", "start"]
+      "command": "bash",
+      "args": ["-c", "exec bun run --cwd ${CLAUDE_PLUGIN_ROOT} --shell=bun --silent start 2> >(tee -a /state/inbox/server.err >&2)"]
     }
   }
 }
