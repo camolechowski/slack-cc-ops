@@ -99,6 +99,14 @@ else
   log "Using existing .env"
 fi
 
+# bun.lock is gitignored; generate it locally before docker build copies it in.
+if [[ ! -f bun.lock ]]; then
+  log "Running bun install in project dir to generate bun.lock"
+  bun install
+else
+  log "bun.lock already present in project dir"
+fi
+
 log "Building and starting slack-cc-ops"
 docker compose up -d --build
 
