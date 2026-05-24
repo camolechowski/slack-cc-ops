@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./state:/state
+      - ./.win-ops:/state
       - ./win:/win:ro
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:

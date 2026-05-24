@@ -4,6 +4,6 @@ bun.lock
 .venv/
 *.log
 .letta/
-state/
+.win-ops/
 win/
 .DS_Store
