@@ -19,62 +19,99 @@ if [[ ! -f "$CLAUDE_CONFIG_DIR/.credentials.json" ]]; then
   exec sleep infinity
 fi
 
-# Pre-seed .claude.json with onboarding bypass so claude doesn't drop into
-# the welcome wizard on each container start. Mirrors win/daemon's
-# ensureSharedInteractiveState() in packages/daemon/src/tmux-suggester.ts.
+# Pre-seed .claude.json with the interactive acknowledgements needed for
+# unattended restarts: onboarding, project trust for /app, and the legacy
+# bypass-permissions warning bit. Current Claude versions read the bypass
+# warning from settings.json; the legacy key is retained for nearby versions.
 CONFIG_FILE="$CLAUDE_CONFIG_DIR/.claude.json"
-if [[ ! -f "$CONFIG_FILE" ]] || ! grep -q '"hasCompletedOnboarding"' "$CONFIG_FILE"; then
-  NOW="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
-  if [[ -f "$CONFIG_FILE" ]]; then
-    # Merge into existing JSON without bun installed in container PATH for botuser
-    # via a tiny Bun one-liner (bun is on PATH from the base image).
-    bun -e "
-      const fs = require('fs');
-      const p = '$CONFIG_FILE';
-      const cur = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
-      const next = { ...cur,
-        theme: typeof cur.theme === 'string' ? cur.theme : 'dark',
-        hasCompletedOnboarding: true,
-        firstStartTime: typeof cur.firstStartTime === 'string' ? cur.firstStartTime : '$NOW',
-      };
-      fs.writeFileSync(p, JSON.stringify(next, null, 2) + '\n');
-    "
-  else
-    cat > "$CONFIG_FILE" <<EOF
-{
-  "theme": "dark",
-  "hasCompletedOnboarding": true,
-  "firstStartTime": "$NOW"
-}
-EOF
-  fi
+NOW="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+PRESEED_RESULT="$(CONFIG_FILE="$CONFIG_FILE" NOW="$NOW" bun -e '
+  const fs = require("fs");
+  const p = process.env.CONFIG_FILE;
+  const now = process.env.NOW;
+  const isObject = (value) => value && typeof value === "object" && !Array.isArray(value);
+  let cur = {};
+  if (fs.existsSync(p)) {
+    try {
+      cur = JSON.parse(fs.readFileSync(p, "utf8"));
+    } catch {
+      cur = {};
+    }
+  }
+  const projectPath = "/app";
+  const defaultProject = {
+    allowedTools: [],
+    mcpContextUris: [],
+    mcpServers: {},
+    enabledMcpjsonServers: [],
+    disabledMcpjsonServers: [],
+    hasTrustDialogAccepted: false,
+    projectOnboardingSeenCount: 0,
+    hasClaudeMdExternalIncludesApproved: false,
+    hasClaudeMdExternalIncludesWarningShown: false,
+  };
+  const projects = isObject(cur.projects) ? cur.projects : {};
+  const existingProject = isObject(projects[projectPath]) ? projects[projectPath] : {};
+  const next = {
+    ...cur,
+    theme: typeof cur.theme === "string" ? cur.theme : "dark",
+    hasCompletedOnboarding: true,
+    firstStartTime: typeof cur.firstStartTime === "string" ? cur.firstStartTime : now,
+    bypassPermissionsModeAccepted: true,
+    projects: {
+      ...projects,
+      [projectPath]: {
+        ...defaultProject,
+        ...existingProject,
+        hasTrustDialogAccepted: true,
+      },
+    },
+  };
+  if (JSON.stringify(next) !== JSON.stringify(cur)) {
+    fs.writeFileSync(p, JSON.stringify(next, null, 2) + "\n");
+    console.log("updated");
+  }
+')"
+if [[ "$PRESEED_RESULT" == "updated" ]]; then
   chmod 600 "$CONFIG_FILE"
-  echo "[slack-cc-ops] Pre-seeded $CONFIG_FILE with onboarding bypass."
+  echo "[slack-cc-ops] Pre-seeded $CONFIG_FILE with Claude startup acknowledgements."
 fi
 
 # Claude requires a TTY — without one it auto-switches to --print mode and
 # errors. Spawn it inside a tmux session, with daemon-style flags and env.
-SYSTEM_PROMPT="$(cat /app/system-prompts/win-ops.md)"
+#
+# IMPORTANT: write the launch to a shell script and have tmux exec that
+# directly. Inline 'bash -ic "..."' with printf '%q' nested quoting was
+# silently dropping the trailing --dangerously-load-development-channels
+# flag, leaving the channel server unspawned.
 SESSION=slackcc
 LOG=/state/inbox/claude.log
+LAUNCH_SCRIPT=/tmp/slack-cc-ops-launch.sh
+
+# Channel plugin state — server.ts reads $SLACK_STATE_DIR or falls back to
+# $HOME/.claude/channels/slack. We want it on the bind mount so access.json,
+# routes.json, and threads.json survive container rebuilds.
+mkdir -p /state/channels/slack
+
+cat > "$LAUNCH_SCRIPT" <<'LAUNCH_EOF'
+#!/bin/bash
+set -e
+cd /app
+export DISABLE_AUTOUPDATER=1
+export USE_BUILTIN_RIPGREP=0
+export CLAUDE_PLUGIN_ROOT=/app
+export SLACK_STATE_DIR=/state/channels/slack
+exec claude \
+  --permission-mode bypassPermissions \
+  --append-system-prompt "$(cat /app/system-prompts/win-ops.md)" \
+  --dangerously-load-development-channels server:slack-channel
+LAUNCH_EOF
+chmod +x "$LAUNCH_SCRIPT"
 
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 : > "$LOG"
 
-# Launch matches the channels-doc invocation:
-#   claude --dangerously-load-development-channels server:slack-channel
-# with --permission-mode bypassPermissions (daemon pattern, supersedes
-# settings.json defaultMode for clarity) and daemon-style env hygiene.
-LAUNCH="cd /app && \
-  DISABLE_AUTOUPDATER=1 \
-  USE_BUILTIN_RIPGREP=0 \
-  CLAUDE_PLUGIN_ROOT=/app \
-  claude \
-    --permission-mode bypassPermissions \
-    --append-system-prompt $(printf '%q' "$SYSTEM_PROMPT") \
-    --dangerously-load-development-channels server:slack-channel"
-
-tmux new-session -d -s "$SESSION" -x 240 -y 60 "bash -ic $(printf '%q' "$LAUNCH")"
+tmux new-session -d -s "$SESSION" -x 240 -y 60 "$LAUNCH_SCRIPT"
 
 # Mirror pane output to a log file -> docker logs (via PID 1 stdout).
 tmux pipe-pane -o -t "$SESSION" "cat >> $LOG"

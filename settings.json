@@ -4,7 +4,16 @@
   },
   "hooks": {
     "PreToolUse": [
-      { "matcher": "Bash", "command": "/app/hooks/pretooluse-bash.sh" }
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/app/hooks/pretooluse-bash.sh"
+          }
+        ]
+      }
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }
