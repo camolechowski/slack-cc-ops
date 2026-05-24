@@ -52,11 +52,13 @@ ENV NODE_ENV=production
 
 USER botuser
 
-# Healthcheck verifies BOTH that the channel server socket file is present
-# (server.ts wrote it) AND that the bun process is still alive (the socket
-# file persists if bun crashes, giving false-green otherwise).
+# Healthcheck: bun server.ts is the channel MCP. If it's running, we're alive
+# enough to receive Slack events. (retrodigio's server.ts doesn't expose a
+# unix socket or HTTP endpoint, so process-presence is the simplest reliable
+# signal.) Entrypoint also has its own liveness loop that exits on bun death
+# so compose can restart us; this healthcheck makes docker label the state.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD test -S /state/inbox/health.sock && pgrep -f "bun.*server.ts" >/dev/null || exit 1
+  CMD pgrep -f "bun.*server.ts" >/dev/null || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["bash", "/app/scripts/entrypoint.sh"]

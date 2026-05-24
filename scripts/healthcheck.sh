@@ -63,12 +63,6 @@ if [ -n "$CONTAINER_STATE" ]; then
     warn "Bolt last status: $BOLT_LAST"
   fi
 
-  # health socket file exists
-  if docker exec slack-cc-ops test -S /state/inbox/health.sock 2>/dev/null; then
-    ok "health socket /state/inbox/health.sock exists"
-  else
-    fail "health socket /state/inbox/health.sock is MISSING"
-  fi
 fi
 
 # -----------------------------------------------------------------------------
@@ -143,11 +137,14 @@ if [ -n "$CTL_PID" ]; then
   # Authed probe (uses controller token from .env)
   TOKEN="$(grep '^WIN_DEPLOY_CONTROLLER_TOKEN=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2-)"
   if [ -n "$TOKEN" ]; then
-    PROBE="$(curl -sS --max-time 5 -H "Authorization: Bearer $TOKEN" http://localhost:9475/api/deploy/runtime/status 2>/dev/null)"
-    if echo "$PROBE" | grep -q "drain\|mode"; then
-      ok "controller /api/deploy/runtime/status responding correctly"
+    PROBE="$(curl -sS --max-time 5 -H "Authorization: Bearer $TOKEN" http://localhost:9475/status 2>/dev/null)"
+    if echo "$PROBE" | grep -q '"ok":true'; then
+      SHA_SHORT="$(echo "$PROBE" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("sha","?")[:8])' 2>/dev/null)"
+      QUIESCENT="$(echo "$PROBE" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("quiescent","?"))' 2>/dev/null)"
+      ACTIVE="$(echo "$PROBE" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("activeJobs","?"))' 2>/dev/null)"
+      ok "controller /status: sha=$SHA_SHORT quiescent=$QUIESCENT activeJobs=$ACTIVE"
     else
-      warn "controller probe got unexpected response: $(echo "$PROBE" | head -c 200)"
+      warn "controller /status got unexpected response: $(echo "$PROBE" | head -c 200)"
     fi
   fi
 else
