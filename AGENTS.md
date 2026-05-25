@@ -36,6 +36,7 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
   - `./win -> /Users/superpea/dvl/win-ops/win`
   - `/Users/superpea/dvl/win -> /Users/superpea/dvl/win`
 - If the bot says `/win` is a dangling worktree or "not a git repository," check those companion mounts before reaching for `GH_TOKEN`.
+- The hook now allows `git -C /win ...` read verbs directly. If a `git` diagnostic is denied, inspect the hook before assuming the worktree mounts broke.
 
 ## Health and validation
 
@@ -52,6 +53,7 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
   - at least one successful Slack connection was logged
 - The current image auto-confirms Claude's "Loading development channels" prompt during startup. If startup looks wedged, inspect `scripts/entrypoint.sh` and the tmux pane before assuming Slack is down.
 - For a deeper host-side audit, run `bash scripts/healthcheck.sh` on the mini. It exercises the core operator commands (`git -C /win`, `docker ps`, `win deploy status`, `win doctor show`) in addition to container/process health.
+- Prefer `win deploy beta|staging|cancel` over the older `win admin deploy *` relay whenever the task maps cleanly to the per-environment controller path.
 
 ## Notes discipline
 

@@ -55,7 +55,7 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 - `scripts/redeploy.sh|restart.sh|logs.sh|exec.sh` — operator quality-of-life (added 2026-05-23).
 - `system-prompts/win-ops.md` — **the bot's principal system prompt**. This is what gets `--append-system-prompt`'d to the running claude. Update this when you want to change bot behavior — the running container reads it on every start.
 - `settings.json` — claude's in-container `~/.claude/settings.json`. Enables `bypassPermissions` mode + registers the `PreToolUse` Bash hook.
-- `hooks/pretooluse-bash.sh` — **the only tool-level gate** in v1. Allows `win` subcommands + a short read-only safelist; denies everything else. Read this before granting more.
+- `hooks/pretooluse-bash.sh` — **the only tool-level gate** in v1. Allows `win` subcommands, direct `git -C /win ...` read verbs, simple polling, and a short shell safelist; denies everything else. Read this before granting more.
 - `hooks/on-session-start.sh` — lifted from odfalik's plugin. Writes `/state/sessions/${PPID}.json` so server.ts can find the conversation_id for thread persistence.
 - `skills/access/`, `skills/threads/`, `skills/configure/` — upstream skills (access mgmt, thread dispatch, token configure). Threads skill currently misregistered ("Unknown skill") — followup.
 

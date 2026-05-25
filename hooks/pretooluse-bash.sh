@@ -56,9 +56,43 @@ allow=false
 
 read -r argv0 argv1 _ <<<"$command_text"
 
+git_subcommand() {
+  local rest="$command_text"
+  local token next
+
+  # strip leading `git`
+  rest="${rest#git}"
+  rest="$(trim_leading "$rest")"
+
+  while [[ -n "$rest" ]]; do
+    read -r token next _ <<<"$rest"
+    case "$token" in
+      -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix|--config-env)
+        rest="${rest#"$token"}"
+        rest="$(trim_leading "$rest")"
+        if [[ -n "$next" ]]; then
+          rest="${rest#"$next"}"
+          rest="$(trim_leading "$rest")"
+        fi
+        ;;
+      --*)
+        rest="${rest#"$token"}"
+        rest="$(trim_leading "$rest")"
+        ;;
+      *)
+        printf '%s\n' "$token"
+        return
+        ;;
+    esac
+  done
+}
+
 case "$argv0" in
   # win CLI + read-only / safe utilities
   /opt/win-cli/bin/win|win|ls|cat|head|tail|grep|rg|fd|wc|find|stat|file|echo|printf|pwd|date|true|false|which|env|hostname|whoami|id|uname|uptime|df|du)
+    allow=true
+    ;;
+  sleep)
     allow=true
     ;;
   # text / data manipulation for diagnostics
@@ -70,7 +104,7 @@ case "$argv0" in
     allow=true
     ;;
   git)
-    case "$argv1" in
+    case "$(git_subcommand)" in
       status|log|diff|show|branch|remote|fetch|tag|describe|rev-parse|rev-list|ls-files|ls-tree|blame|reflog|shortlog|grep|stash)
         allow=true
         ;;

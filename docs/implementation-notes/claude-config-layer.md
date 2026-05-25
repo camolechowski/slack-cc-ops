@@ -2,20 +2,57 @@
 spec: slack-cc-ops:settings assignment — Claude settings, hook, and system prompt
 status: shipped
 created: 2026-05-23
-last_updated: 2026-05-24
+last_updated: 2026-05-25
 related: []
 ---
 
 # Claude Config Layer
 
 ## Summary
-This workstream owns the in-container Claude configuration layer for the slack-cc-ops bot: root `settings.json`, the Bash `PreToolUse` hook, the principal `system-prompts/win-ops.md` prompt, and the Claude startup state needed for non-interactive container restarts. The v1 security model deliberately uses Claude `bypassPermissions` plus an external Bash hook gate that permits the `win` CLI and targeted shell recovery tools. Remote Mac mini rebuild validation is now complete, and the prompt has been tightened so the bot defaults to highly agreeable, persistent operator behavior: act on principal instructions, ask once when destructive confirmation is required, and keep driving recovery until the deploy or incident is actually resolved.
+This workstream owns the in-container Claude configuration layer for the slack-cc-ops bot: root `settings.json`, the Bash `PreToolUse` hook, the principal `system-prompts/win-ops.md` prompt, and the Claude startup state needed for non-interactive container restarts. The latest session removed a few self-inflicted ops tripwires from that layer: the hook now allows the bot's normal `git -C /win ...` diagnostics plus simple polling sleeps, and the system prompt no longer teaches the bot that the old relay-based deploy path is the default. Remote Mac mini rebuild validation is complete; the next step is keeping the prompt, hook, and actual runtime privileges aligned so the bot does not hallucinate constraints or stale workflows.
 
 ## Current open questions
 - [ ] Should the Bash hook later reject shell metacharacter chaining after an allowed argv0, or is the brief's first-token gate intentionally enough for v1?
 - [x] ~~Can a coordinator with SSH access run the fresh Mac mini rebuild validation and confirm the pane reaches the Claude REPL with channel loading and no prompts?~~ -> Yes. On 2026-05-24 the Mac mini rebuild/redeploy completed successfully, the container reconnected to Slack, and beta health verified on `build.commit = 5459614e`.
 
 ## Sessions
+
+### 2026-05-25 — session `20260525-955223c-sim` (agent: codex)
+**Branch / working tree:** `master`
+**Spec ref:** operator request to simplify slack-cc-ops and remove environment tripwires now that principals are comfortable with broader bot privilege
+**Files touched:** `hooks/pretooluse-bash.sh`, `system-prompts/win-ops.md`, `AGENTS.md`, `CLAUDE.md`, `docs/implementation-notes/README.md`, `docs/implementation-notes/claude-config-layer.md`
+
+#### Context loaded
+I read the existing config-layer note plus the live prompt and hook, then inspected the running Mac mini container. Two mismatches were immediately visible: the hook denied ordinary `git -C /win ...` diagnostics even though the bot's docs encouraged them, and the prompt still advertised relay-based deploy flows that no longer matched the controller-first reality.
+
+#### Design decisions
+- **Fix the actual tripwires before broadening privilege further:** Instead of immediately making the bot writable or git-publishing, I first removed the friction that was already blocking normal diagnosis: direct `git -C /win ...` reads, `sleep` for polling loops, and stale deploy guidance in the prompt.
+- **Keep controller-first deploy guidance explicit:** The prompt now treats `win deploy beta|staging|cancel`, `win deploy status`, and `win deploy verify` as the normal path. The admin relay remains documented only as an older/debugging surface.
+- **Align docs with real runtime privilege:** The bot still runs with `bypassPermissions`, Docker access, and WIN super-admin auth, but `/win` remains operationally read-only. I kept that boundary explicit instead of pretending the bot can already publish code.
+
+#### Deviations from spec
+- **No new capability grant yet:** The user said the bot may be as privileged as Cam, but this session stopped at removing obvious tripwires in the existing environment. Mounting `/win` read-write or granting git publication would be a larger contract change than the immediate cleanup required.
+
+#### Tradeoffs considered
+- **Broaden power vs. reduce confusion first:** Granting more power would remove some bottlenecks, but it would not fix the more embarrassing current failures where the bot talks itself into the wrong deploy flow or gets blocked on `git -C /win`. I fixed confusion first because that improves reliability immediately and with lower blast radius.
+
+#### Open questions
+- [ ] Should `/win` become intentionally writable for the bot once the controller-first ops flow is stable, or is read-only still the right boundary even with high operator trust?
+- [ ] Should the hook later permit narrowly-scoped write verbs such as `git checkout` or repo-local patch application inside a dedicated bot worktree, instead of jumping straight to full publish power?
+
+#### Footguns and gotchas
+- Alpine/Docker Desktop marks `/win` as a read-only `fakeowner` mount. `test -w /win` can misleadingly report writable metadata semantics even though `touch /win/...` fails with `Read-only file system`; real write probes need an actual file create test.
+- The bot already had enough privilege to call the live controllers, but the stale prompt still nudged it toward `win admin deploy cancel` and raw `curl` debugging. Prompt drift alone was creating operational confusion.
+- The old hook logic keyed git allow/deny off `argv1`, so any `git -C /win ...` call looked denied even though the actual subcommand was harmless.
+
+#### What shipped this session
+- Updated the Bash hook to resolve the first real git subcommand after common global flags like `-C`, and allowed `sleep` for simple retry/poll loops.
+- Updated the bot prompt so controller-scoped deploy commands are the default path and the legacy relay path is clearly secondary.
+- Updated `AGENTS.md` and `CLAUDE.md` so future agents know the hook now supports direct `git -C /win ...` reads and that controller-first deploy guidance is intentional.
+
+#### What's next
+- Redeploy `slack-cc-ops` on the Mac mini, then verify inside the live container that `git -C /win ...` works and that the prompt-reload path picks up the new controller-first guidance.
+- If principals still want less human bottleneck after this cleanup, treat writable bot worktrees and broader publish/edit powers as a separate, explicit contract change.
 
 ### 2026-05-24 — session `20260524-df0a559-oyc` (agent: codex)
 **Branch / working tree:** `master`

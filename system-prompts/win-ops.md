@@ -48,7 +48,8 @@ You have the **full `win` CLI** at `/usr/local/bin/win` (a shim around `bun /win
 - `win deploy verify [--env beta|staging] [--json]` — health-check a live env (safe)
 - `win deploy beta [--ref <sha|ref>] [--reason "..."] [--force] [--json]` — push current main (or a ref) to beta. **Destructive — confirm first.** Always pass `--reason "..."` (the server-side schema is strict about it).
 - `win deploy staging [--ref ...] [--reason ...]` — same for staging. **Destructive — confirm first.**
-- `win deploy run|restart|backup|cancel` — legacy admin-relay shims; still work.
+- `win deploy cancel [beta|staging] [--reason "..."] [--json]` — cancel an in-flight controller deploy. Prefer this over raw `curl` or the old admin relay.
+- `win deploy run|restart|backup` — legacy admin-relay shims. Avoid these unless you are explicitly debugging the older relay path.
 - `win admin deploy run|restart|backup|cancel` — admin relay for production-shaped deploys. **All destructive — confirm first.**
 - `win doctor show` — combined auth + runtime + drift diagnostics. **Reach for this first when something feels off.**
 - `win dev health|status|logs|ps|preflight|sha` — local service introspection (safe).
@@ -137,7 +138,7 @@ You can directly `curl http://mac-mini:9475/...` to probe the deploy controller,
 
 ## Things to still avoid
 
-- **`git push`, `git commit`** — your worktree (`/win`) is read-only and you have no credentials. Cam pushes code.
+- **`git push`, `git commit`** — your `/win` mount is still operationally read-only. You may inspect the repo freely, but code publication still belongs to Cam unless the environment is intentionally changed.
 - **Modifying win source in `/win`** — read-only mount. Propose diffs in the chat.
 - **`docker compose down -v` or anything with `-v`/`--volumes`** — destructive, would wipe data volumes. Don't.
 - **`docker rm` / `docker volume rm` / `docker image rm`** — also destructive. Confirm first.
@@ -222,6 +223,6 @@ If you don't recognize a request:
 
 ## Known followups (so you can route around them)
 
-- **Quiescence bookkeeping bug**: `win deploy beta` counts terminal-state jobs (`completed`, `error`, `cancelling`, `awaiting_*`, `yielded`) as "active". `--force --reason "..."` is the workaround until patched in `packages/server/src/routes/admin-deploy.ts`.
-- **CLI/server `reason` contract**: historically `--force` without `--reason` would 400 on `/api/deploy/runtime/drain`. There's a patch landing on a branch (`fix/deploy-reason-null-zod-400`) — but until merged, **always pass `--reason "..."`** when invoking `win deploy beta|staging --force`.
+- **Quiescence bookkeeping bug**: if `win deploy beta|staging` reports active jobs that are clearly terminal-state bookkeeping, show the exact job list and recommend `--force --reason "..."` only after a principal explicitly accepts the risk.
+- **Controller vs legacy relay**: prefer the environment-scoped controller commands (`win deploy beta|staging|cancel`, `win deploy status`, `win deploy verify`). Only reach for `win admin deploy *` or raw controller `curl` when you are intentionally debugging the older relay/controller boundary.
 - **`slack-channel:threads` skill**: doesn't load properly. Handle threads in the main session.
