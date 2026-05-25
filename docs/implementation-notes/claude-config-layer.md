@@ -49,9 +49,9 @@ I read the existing config-layer note plus the live prompt and hook, then inspec
 - Updated the Bash hook to resolve the first real git subcommand after common global flags like `-C`, and allowed `sleep` for simple retry/poll loops.
 - Updated the bot prompt so controller-scoped deploy commands are the default path and the legacy relay path is clearly secondary.
 - Updated `AGENTS.md` and `CLAUDE.md` so future agents know the hook now supports direct `git -C /win ...` reads and that controller-first deploy guidance is intentional.
+- Pushed the bot repo changes to `origin/master`, redeployed `slack-cc-ops` on the Mac mini, fast-forwarded the bot's mounted `~/dvl/win-ops/win` worktree to `64cab3aa`, and verified live that the hook allows `git -C /win ...` and `win deploy cancel --json` now hits the controller path instead of the dead admin relay.
 
 #### What's next
-- Redeploy `slack-cc-ops` on the Mac mini, then verify inside the live container that `git -C /win ...` works and that the prompt-reload path picks up the new controller-first guidance.
 - If principals still want less human bottleneck after this cleanup, treat writable bot worktrees and broader publish/edit powers as a separate, explicit contract change.
 
 ### 2026-05-24 — session `20260524-df0a559-oyc` (agent: codex)
