@@ -2,10 +2,15 @@ FROM oven/bun:1-alpine AS base
 
 ARG DOCKER_GID=999
 
+# docker-cli-compose ships the Compose v2 plugin at
+# /usr/libexec/docker/cli-plugins/docker-compose so `docker compose ...`
+# works in-container. The image is musl/alpine, so the apt
+# `docker-compose-plugin` (glibc) is not applicable here.
 RUN apk add --no-cache \
     bash \
     curl \
     docker-cli \
+    docker-cli-compose \
     dumb-init \
     git \
     openssh-client \
