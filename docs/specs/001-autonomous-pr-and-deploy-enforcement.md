@@ -62,4 +62,4 @@ None of Gap B blocks Gap A. Gap A (PR authoring) is requester-scoped and reviewa
 
 - Not a WIN workflow. Do **not** route this through the WIN kernel, router, subprocess spawn path, WIN roles, or the WIN `tokens` table.
 - No new role system inside WinOps. Access stays the channel allowlist in `gate.ts` (principals: Cam, Scott).
-- The corrected WIN-side note is `win/docs/specs/050-winops-chatops-slack-fix-dispatch.md` (Reference/pointer only). This repo is the source of truth.
+- The WIN repo tracks this program in `win/docs/specs/050-...` (program tracker + `slops` vision) and mirrors this spec at `win/docs/specs/051-winops-autonomous-pr-and-deploy-enforcement.md`. Those are tracking copies for visibility; **this repo is the source of truth** — if they diverge, this copy wins.
