@@ -1,4 +1,6 @@
-# slack-cc-ops — repo handbook
+# slops — repo handbook
+
+(Formerly **slack-cc-ops** / **win-ops** — renamed to **slops** (BigWin AI Slack Ops Agent) on 2026-06-09.)
 
 `AGENTS.md` is the short operational checklist for future agents. Read that first if you need the fast path; use this file for the full architecture and file-level handbook.
 
@@ -21,14 +23,14 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Mac mini (superpea@mac-mini)                                         │
 │                                                                       │
-│  Docker compose project: win-ops                                      │
-│   └─ container: slack-cc-ops                                          │
-│       ├─ tmux session "slackcc"                                       │
+│  Docker compose project: slops                                        │
+│   └─ container: slops                                                 │
+│       ├─ tmux session "slops"                                         │
 │       │   └─ claude CLI (persistent REPL)                             │
 │       │       └─ MCP subprocess: bash wrapper → bun server.ts         │
 │       │           (the slack-channel MCP — Bolt receiver +            │
 │       │            reply/react/edit_message/etc. tools)               │
-│       ├─ mounts: ./state→/state, ./win→/win:ro, /var/run/docker.sock  │
+│       ├─ mounts: ./.win-ops→/state, ./win→/win:ro, /var/run/docker.sock │
 │       └─ env: SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET, │
 │              WIN_DEPLOY_CONTROLLER_TOKEN, HOST_DOCKER_GID, etc.       │
 │                                                                       │
@@ -48,11 +50,11 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 - `.mcp.json` — declares the `slack-channel` MCP server with a `bash -c "exec bun ... 2> >(tee -a /state/inbox/server.err >&2)"` wrapper so we can actually see Bolt's stderr (it's otherwise swallowed by claude's MCP stdio capture).
 
 ### Our fork-specific files
-- `Dockerfile` — `oven/bun:1-alpine` base, installs claude code globally via `BUN_INSTALL=/usr/local`, re-symlinks the musl variant of claude (Alpine quirk), adds `bash`/`git`/`docker-cli`/`tmux`. Botuser shell is `/bin/bash` (NOT nologin — tmux needs a real shell).
-- `docker-compose.yml` — single-service stack named `slack-cc-ops`. Bind-mounts `./state`, `./win`, the host-side git metadata paths that the `/win` worktree points at, and `/var/run/docker.sock`. No public ports (Socket Mode is outbound-only).
-- `scripts/entrypoint.sh` — symlinks `/app/settings.json` into `$CLAUDE_CONFIG_DIR`, creates the `win` shim, pre-seeds `.claude.json` with onboarding bypass + project trust + bypass-permissions acceptance, clears stale `plugin.lock`, launches claude in tmux via `/tmp/slack-cc-ops-launch.sh` (which must be written as a file — inlining via `bash -ic` ate the `--dangerously-load-development-channels` flag).
+- `Dockerfile` — `oven/bun:1.3.0-alpine` base, installs claude code via `npm install -g --omit=dev @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}` (version-pinned ARG; no manual musl symlink needed — npm picks the correct native binary), adds `bash`/`git`/`docker-cli`/`tmux`/`github-cli`/`ripgrep`/`libgcc`/`libstdc++`. Botuser shell is `/bin/bash` (NOT nologin — tmux needs a real shell).
+- `docker-compose.yml` — single-service stack named `slops`, service `slops`, container `slops`. Bind-mounts `./.win-ops` (state — path intentionally unchanged for live continuity), `./win`, the host-side git metadata paths that the `/win` worktree points at, and `/var/run/docker.sock`. No public ports (Socket Mode is outbound-only).
+- `scripts/entrypoint.sh` — symlinks `/app/settings.json` into `$CLAUDE_CONFIG_DIR`, creates the `win` shim, pre-seeds `.claude.json` with onboarding bypass + project trust + bypass-permissions acceptance, clears stale `plugin.lock`, launches claude in tmux session `slops` via `/tmp/slops-launch.sh` (which must be written as a file — inlining via `bash -ic` ate the `--dangerously-load-development-channels` flag).
 - `scripts/bootstrap-mini.sh` — first-run setup on a fresh Mac mini. See below.
-- `scripts/redeploy.sh|restart.sh|logs.sh|exec.sh` — operator quality-of-life (added 2026-05-23).
+- `scripts/redeploy.sh|restart.sh|logs.sh|exec.sh` — operator quality-of-life.
 - `system-prompts/win-ops.md` — **the bot's principal system prompt**. This is what gets `--append-system-prompt`'d to the running claude. Update this when you want to change bot behavior — the running container reads it on every start.
 - `settings.json` — claude's in-container `~/.claude/settings.json`. Enables `bypassPermissions` mode + registers the `PreToolUse` Bash hook.
 - `hooks/pretooluse-bash.sh` — **the only tool-level gate** in v1. Allows `win` subcommands, direct `git -C /win ...` read verbs, simple polling, and a short shell safelist; denies everything else. Read this before granting more.
@@ -61,7 +63,7 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 
 ## State
 
-`./.win-ops/` is gitignored and bind-mounted into the container at `/state`. Directory shape:
+`./.win-ops/` is gitignored and bind-mounted into the container at `/state`. The bind-mount path is intentionally unchanged from the pre-rename period to preserve live state on the Mac mini without a cutover step. Directory shape:
 
 - `.win-ops/claude-config/` — `$CLAUDE_CONFIG_DIR` target. `.credentials.json` (OAuth, written by interactive `claude login` on first boot), `.claude.json` (config including pre-seeded acknowledgements), `settings.json` (symlink → `/app/settings.json`).
 - `.win-ops/channels/slack/` — channel-server state. `access.json` (allowlist), `routes.json` (channel ID → working dir mapping), `threads.json` (thread_ts → conversation_id), `plugin.lock` (PID singleton).
@@ -80,10 +82,10 @@ mkdir -p ~/dvl && cd ~/dvl
 git clone git@github.com:camolechowski/slack-cc-ops.git win-ops
 cd win-ops
 ./scripts/bootstrap-mini.sh        # creates worktree, prompts for Slack secrets, builds + starts container
-docker exec -it slack-cc-ops claude login   # paste OAuth code back
-docker compose restart slack-cc-ops          # entrypoint sees credentials, claude starts for real
-docker exec -it slack-cc-ops claude /slack-channel:access pair @cam
-docker exec -it slack-cc-ops claude /slack-channel:access pair @scott
+docker exec -it slops claude login   # paste OAuth code back
+docker compose restart slops          # entrypoint sees credentials, claude starts for real
+docker exec -it slops claude /slack-channel:access pair @cam
+docker exec -it slops claude /slack-channel:access pair @scott
 ```
 
 `bootstrap-mini.sh` handles: docker preflight, win worktree creation (`~/dvl/win-live → ~/dvl/win-ops/win` on `slack-cc-ops-bot` branch), `bun install` in the worktree, interactive Slack secret entry (writes `.env` chmod 600), `bun install` in project dir to generate `bun.lock`, `docker compose up -d --build`.
@@ -110,7 +112,7 @@ All in `scripts/`:
 | `restart.sh` | Restart container only (no rebuild) — for prompt-only iteration |
 | `healthcheck.sh` | Host-side end-to-end audit for bot auth, Slack connectivity, core operator commands, beta health, and deploy controller |
 | `logs.sh` | Tail `server.err` + `claude.log` cleanly (ANSI stripped, trigger-filtered) |
-| `exec.sh` | `ssh + docker exec -it` into the container's bash shell |
+| `exec.sh` | `docker exec -it` into the container's bash shell |
 
 Run them on the mini via SSH (or from the laptop as `ssh superpea@mac-mini 'bash ~/dvl/win-ops/scripts/<name>.sh'`).
 
@@ -123,6 +125,7 @@ Run them on the mini via SSH (or from the laptop as `ssh superpea@mac-mini 'bash
 - **Tokens** — `SLACK_BOT_TOKEN` is set at app install time and only changes when you fully uninstall+reinstall (re-installs don't rotate). If you ever see stale-scope behavior (e.g. `auth.test` returns a scope that's not in the OAuth UI's scope list anymore), the token needs to be rotated via uninstall+reinstall, not just reinstall.
 - **Slack `assistant:write` scope** — if Agents & AI Apps is enabled OR `assistant:write` is granted, Slack hijacks DMs into the AI Assistant pane and they don't fire `message.im` events. Keep both **off**.
 - **`#win-ops` is public** (`is_private: False`) — the gate.ts allowlist is the only access control.
+- **SLOPS_DIR env override** — operator scripts honor `$SLOPS_DIR` as the project dir override; `$SLACK_CC_OPS_DIR` is retained as a fallback for backward compatibility.
 
 ## Upstream tracking
 

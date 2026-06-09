@@ -1,4 +1,6 @@
-# slack-cc-ops agent notes
+# slops agent notes
+
+(Formerly **slack-cc-ops** / **win-ops** — renamed to **slops** (BigWin AI Slack Ops Agent) on 2026-06-09.)
 
 Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file is the short operational contract for agents making changes or deploying the bot.
 
@@ -6,7 +8,7 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
 
 - This repo runs the `#win-ops` Slack bot on `ssh superpea@mac-mini`.
 - The repo checkout on the mini is `~/dvl/win-ops`.
-- The container is `slack-cc-ops` in the `docker compose` stack rooted at that checkout.
+- The container is `slops` in the `docker compose` stack (project name `slops`) rooted at that checkout.
 - The bot talks to Slack over Socket Mode only; there are no public HTTP ports to validate.
 
 ## First files to read
@@ -31,7 +33,7 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
 - On Docker Desktop for macOS, the mounted socket may appear inside the container as `root:root` with mode `660` even when host-side GID detection says otherwise.
 - The image must keep `botuser` in group `0` as well as the detected socket group. If not, `docker ps` and `docker exec` fail with `permission denied while trying to connect to the Docker daemon socket`.
 - After touching Docker permissions, validate with:
-  - `docker exec slack-cc-ops sh -lc 'id && ls -ln /var/run/docker.sock && docker ps --format "{{.Names}}"'`
+  - `docker exec slops sh -lc 'id && ls -ln /var/run/docker.sock && docker ps --format "{{.Names}}"'`
 - `/win` is a mounted git worktree, not a plain clone. To let `git -C /win ...` resolve `origin/main`, the container must also mount the host-side worktree metadata paths that `/win/.git` points at:
   - `./win -> /Users/superpea/dvl/win-ops/win`
   - `/Users/superpea/dvl/win -> /Users/superpea/dvl/win`
@@ -41,9 +43,9 @@ Start here for the fast path. `CLAUDE.md` is the full repo handbook; this file i
 ## Health and validation
 
 - Healthy runtime signals:
-  - `docker compose ps` shows `slack-cc-ops` as `Up` and `healthy`
-  - `docker exec slack-cc-ops tail -40 /state/inbox/server.err` includes `slack channel: connected as`
-  - `docker exec slack-cc-ops tmux capture-pane -pt slackcc | tail -40` shows Claude at an interactive prompt instead of a stuck startup screen
+  - `docker compose ps` shows `slops` as `Up` and `healthy`
+  - `docker exec slops tail -40 /state/inbox/server.err` includes `slack channel: connected as`
+  - `docker exec slops tmux capture-pane -pt slops | tail -40` shows Claude at an interactive prompt instead of a stuck startup screen
 - The Docker healthcheck is intentionally stronger than a plain process probe. It verifies:
   - Claude is running
   - the Slack MCP process is running

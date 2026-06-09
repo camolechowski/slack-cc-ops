@@ -1,13 +1,15 @@
 ## About this fork
 
+**slops** (BigWin AI Slack Ops Agent) — formerly **slack-cc-ops** / **win-ops**, renamed 2026-06-09.
+
 This is a fork of retrodigio/claude-channel-slack customized for Cam + dad's olelabs workspace, deployed as a Docker container on a Mac mini to provide Slack-fronted ops for the BigWin/win platform. Upstream LICENSE and copyright headers retained — see NOTICE.
 
 Differences from upstream:
 
-- Dockerfile and docker-compose hosting for the standalone Mac mini container.
+- Dockerfile and docker-compose hosting for the standalone Mac mini container (project/container name: `slops`).
 - `settings.json` uses `bypassPermissions` as the defaultMode, with a PreToolUse Bash hook constraining commands to the `win` CLI.
 - `system-prompts/win-ops.md` provides the principal prompt for the Slack-fronted ops bot.
-- `package.json` is renamed for this project fork.
+- `package.json` name is `slops`.
 
 See `CLAUDE.md` for the repo layout and `scripts/bootstrap-mini.sh` for deploy bootstrap.
 
