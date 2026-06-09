@@ -1,11 +1,12 @@
+name: slops
 services:
-  slack-cc-ops:
+  slops:
     build:
       context: .
       args:
         DOCKER_GID: "${HOST_DOCKER_GID:-999}"
-    image: slack-cc-ops:latest
-    container_name: slack-cc-ops
+    image: slops:latest
+    container_name: slops
     restart: unless-stopped
     env_file: .env
     volumes:

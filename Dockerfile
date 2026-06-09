@@ -1,4 +1,4 @@
-FROM oven/bun:1-alpine AS base
+FROM oven/bun:1.3.0-alpine AS base
 
 ARG DOCKER_GID=999
 
@@ -8,21 +8,22 @@ RUN apk add --no-cache \
     docker-cli \
     dumb-init \
     git \
+    github-cli \
+    libgcc \
+    libstdc++ \
+    nodejs \
+    npm \
     openssh-client \
+    ripgrep \
     tmux
 
-# BUN_INSTALL=/usr/local so the global install (and its arch-specific
-# platform packages) lands under a world-readable path. Default $HOME/.bun
-# puts the real binary under /root/.bun which is mode 700 — the symlink in
-# /usr/local/bin/claude resolves but the target isn't reachable by non-root.
-#
-# Bun's install also creates /usr/local/bin/claude pointing at the glibc
-# variant (claude-code-linux-arm64/claude). Alpine is musl, so the glibc
-# binary fails to exec ("required file not found"). Re-point at the musl
-# variant after install.
-RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code && \
-    MUSL_BIN="$(find /usr/local/install/global/node_modules/@anthropic-ai -name claude -path '*-musl/claude' | head -1)" && \
-    if [ -n "$MUSL_BIN" ]; then ln -sf "$MUSL_BIN" /usr/local/bin/claude; fi
+# Install claude-code via npm (matches win monorepo idiom). The npm global
+# install lands under /usr/local/lib/node_modules and places the binary at
+# /usr/local/bin/claude — world-readable on Alpine and picks the correct
+# musl-compatible native binary automatically (no manual symlink dance needed).
+ARG CLAUDE_CODE_VERSION=2.1.150
+RUN npm install -g --omit=dev @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+ && claude --version
 
 WORKDIR /app
 
@@ -58,13 +59,8 @@ ENV NODE_ENV=production
 
 USER botuser
 
-# Healthcheck: bun server.ts is the channel MCP. If it's running, we're alive
-# enough to receive Slack events. (retrodigio's server.ts doesn't expose a
-# unix socket or HTTP endpoint, so process-presence is the simplest reliable
-# signal.) Entrypoint also has its own liveness loop that exits on bun death
-# so compose can restart us; this healthcheck makes docker label the state.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD pgrep -f "bun.*server.ts" >/dev/null || exit 1
+  CMD bash /app/scripts/container-healthcheck.sh
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["bash", "/app/scripts/entrypoint.sh"]
