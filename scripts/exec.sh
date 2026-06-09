@@ -7,4 +7,4 @@
 
 set -euo pipefail
 
-exec docker exec -it slack-cc-ops bash
+exec docker exec -it slops bash

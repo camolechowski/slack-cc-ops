@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR="${SLACK_CC_OPS_DIR:-$HOME/dvl/win-ops}"
+PROJECT_DIR="${SLOPS_DIR:-${SLACK_CC_OPS_DIR:-$HOME/dvl/win-ops}}"
 
 RAW=0
 if [ "${1:-}" = "--raw" ]; then
@@ -18,11 +18,11 @@ log() { echo "[logs] $*" >&2; }
 
 if [ "$RAW" = "1" ]; then
   log "raw mode — all output, no filter"
-  docker exec slack-cc-ops sh -c 'tail -F /state/inbox/server.err /state/inbox/claude.log 2>/dev/null'
+  docker exec slops sh -c 'tail -F /state/inbox/server.err /state/inbox/claude.log 2>/dev/null'
   exit 0
 fi
 
 log "filtered mode — channel events, command runs, errors. Pass --raw for everything."
 
-docker exec slack-cc-ops sh -c '(tail -F /state/inbox/server.err 2>/dev/null & tail -F /state/inbox/claude.log 2>/dev/null) | sed -uE "s/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g"' \
+docker exec slops sh -c '(tail -F /state/inbox/server.err 2>/dev/null & tail -F /state/inbox/claude.log 2>/dev/null) | sed -uE "s/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b\][^\x07]*\x07//g"' \
   | grep -E --line-buffered -i 'slack channel:|app_mention|<channel|channel source|Bash\(|/win |gear|deny|notifications/claude|win dev|win deploy|win run|win jobs|message_id|chat_id|error|fail|connected|warn|new assistant'
