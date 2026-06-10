@@ -13,9 +13,9 @@ WIN_SHIM
 chmod +x /usr/local/bin/win
 
 if [[ ! -f "$CLAUDE_CONFIG_DIR/.credentials.json" ]]; then
-  echo "[slack-cc-ops] No Claude credentials yet."
-  echo "[slack-cc-ops] Run: docker exec -it slack-cc-ops claude login"
-  echo "[slack-cc-ops] Then: docker compose restart slack-cc-ops"
+  echo "[slops] No Claude credentials yet."
+  echo "[slops] Run: docker exec -it slops claude login"
+  echo "[slops] Then: docker compose restart slops"
   exec sleep infinity
 fi
 
@@ -74,7 +74,7 @@ PRESEED_RESULT="$(CONFIG_FILE="$CONFIG_FILE" NOW="$NOW" bun -e '
 ')"
 if [[ "$PRESEED_RESULT" == "updated" ]]; then
   chmod 600 "$CONFIG_FILE"
-  echo "[slack-cc-ops] Pre-seeded $CONFIG_FILE with Claude startup acknowledgements."
+  echo "[slops] Pre-seeded $CONFIG_FILE with Claude startup acknowledgements."
 fi
 
 # Claude requires a TTY — without one it auto-switches to --print mode and
@@ -84,9 +84,9 @@ fi
 # directly. Inline 'bash -ic "..."' with printf '%q' nested quoting was
 # silently dropping the trailing --dangerously-load-development-channels
 # flag, leaving the channel server unspawned.
-SESSION=slackcc
+SESSION=slops
 LOG=/state/inbox/claude.log
-LAUNCH_SCRIPT=/tmp/slack-cc-ops-launch.sh
+LAUNCH_SCRIPT=/tmp/slops-launch.sh
 
 # Channel plugin state — server.ts reads $SLACK_STATE_DIR or falls back to
 # $HOME/.claude/channels/slack. We want it on the bind mount so access.json,
@@ -99,7 +99,7 @@ mkdir -p /state/channels/slack
 # misclassifies — leaving the new server.ts process refusing to start.
 LOCK=/state/channels/slack/plugin.lock
 if [ -f "$LOCK" ] && ! pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
-  echo "[slack-cc-ops] No bun server.ts running but $LOCK exists — clearing stale lock"
+  echo "[slops] No bun server.ts running but $LOCK exists — clearing stale lock"
   rm -f "$LOCK"
 fi
 
@@ -131,7 +131,7 @@ for _ in 1 2 3 4 5 6 7 8; do
     break
   fi
   if tmux capture-pane -pt "$SESSION" 2>/dev/null | grep -q "Loading development channels"; then
-    echo "[slack-cc-ops] Confirming Claude development-channel prompt"
+    echo "[slops] Confirming Claude development-channel prompt"
     tmux send-keys -t "$SESSION" Enter
   fi
   sleep 2
@@ -152,12 +152,12 @@ sleep 30
 
 while tmux has-session -t "$SESSION" 2>/dev/null; do
   if ! pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
-    echo "[slack-cc-ops] bun server.ts (the channel MCP) is no longer running — exiting so compose restarts the container"
+    echo "[slops] bun server.ts (the channel MCP) is no longer running — exiting so compose restarts the container"
     break
   fi
   sleep 10
 done
 
 kill "$TAIL_PID" 2>/dev/null || true
-echo "[slack-cc-ops] liveness loop exiting at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "[slops] liveness loop exiting at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 exit 1

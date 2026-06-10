@@ -4,18 +4,18 @@ set -euo pipefail
 # Non-interactive SSH sessions don't source ~/.zshrc, so add bun to PATH explicitly.
 export PATH="$HOME/.bun/bin:$PATH"
 
-# Bootstrap slack-cc-ops on the Mac mini.
+# Bootstrap slops on the Mac mini (formerly slack-cc-ops/win-ops).
 #
 # Expected layout:
 #   ~/dvl/win-ops/            (this repo, cloned here)
 #   ~/dvl/win-ops/win/        (git worktree of ~/dvl/win-live tracking main)
-#   ~/dvl/win-ops/state/      (gitignored, bind-mounted to /state in container)
+#   ~/dvl/win-ops/.win-ops/   (gitignored state dir, bind-mounted to /state in container)
 #   ~/dvl/win-ops/.env        (created interactively if missing, chmod 600)
 #
 # Run from inside ~/dvl/win-ops/.
 
 log() {
-  echo "[slack-cc-ops] $*"
+  echo "[slops] $*"
 }
 
 detect_docker_gid() {
@@ -40,7 +40,7 @@ prompt_secret() {
 }
 
 if ! docker info >/dev/null 2>&1; then
-  echo "[slack-cc-ops] docker info failed; start Docker Desktop on the Mac mini and retry." >&2
+  echo "[slops] docker info failed; start Docker Desktop on the Mac mini and retry." >&2
   exit 1
 fi
 
@@ -50,7 +50,7 @@ PROJECT_DIR="$(pwd)"
 WIN_WORKTREE_DIR="$PROJECT_DIR/win"
 
 if [[ ! -d "$WIN_LIVE/.git" ]] && [[ ! -f "$WIN_LIVE/.git" ]]; then
-  echo "[slack-cc-ops] Cannot find win repo at $WIN_LIVE (override with WIN_LIVE=...)." >&2
+  echo "[slops] Cannot find win repo at $WIN_LIVE (override with WIN_LIVE=...)." >&2
   exit 1
 fi
 
@@ -107,25 +107,25 @@ else
   log "bun.lock already present in project dir"
 fi
 
-log "Building and starting slack-cc-ops"
+log "Building and starting slops"
 docker compose up -d --build
 
 cat <<'EOF'
 
-[slack-cc-ops] Container started.
+[slops] Container started.
 
 Next steps:
   1. Interactive login:
-       docker exec -it slack-cc-ops claude login
+       docker exec -it slops claude login
      (open the URL in your browser, paste the code back)
 
   2. Restart so claude picks up the credentials:
-       docker compose restart slack-cc-ops
+       docker compose restart slops
 
   3. Tail logs and watch for "Slack socket connected":
-       docker compose logs -f slack-cc-ops
+       docker compose logs -f slops
 
   4. Pair Slack users (run for each — Cam + dad):
-       docker exec -it slack-cc-ops claude /slack-channel:access pair @cam
-       docker exec -it slack-cc-ops claude /slack-channel:access pair @dad
+       docker exec -it slops claude /slack-channel:access pair @cam
+       docker exec -it slops claude /slack-channel:access pair @dad
 EOF
