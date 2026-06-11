@@ -123,17 +123,42 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 
 tmux new-session -d -s "$SESSION" -x 240 -y 60 "$LAUNCH_SCRIPT"
 
+slog() { echo "[slops] $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
+
+WEDGED_MARKER=/state/inbox/WEDGED
+rm -f "$WEDGED_MARKER" 2>/dev/null || true
+
+# A fresh boot can land directly on the interactive session-limit modal. The
+# safe default is option "1. Stop and wait for limit to reset" — acknowledge it
+# so the container doesn't hang on an unattended modal. The supervisor loop
+# below then catches the wedge state and marks the container unhealthy.
+acknowledge_limit_modal() {
+  local pane="$1"
+  case "$pane" in
+    *"Stop and wait"*|*"wait for limit to reset"*)
+      slog "session-limit modal detected — acknowledging '1. Stop and wait'"
+      tmux send-keys -t "$SESSION" "1" 2>/dev/null || true
+      tmux send-keys -t "$SESSION" Enter 2>/dev/null || true
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 # Newer Claude builds prompt for confirmation before loading development
 # channels. The default selection is the safe "local development" option, so
-# acknowledge it automatically until the channel MCP is actually alive.
+# acknowledge it automatically until the channel MCP is actually alive. A boot
+# that lands on the session-limit modal is acknowledged here too.
 for _ in 1 2 3 4 5 6 7 8; do
   if pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
     break
   fi
-  if tmux capture-pane -pt "$SESSION" 2>/dev/null | grep -q "Loading development channels"; then
+  boot_pane="$(tmux capture-pane -pt "$SESSION" 2>/dev/null || true)"
+  if grep -q "Loading development channels" <<<"$boot_pane"; then
     echo "[slops] Confirming Claude development-channel prompt"
     tmux send-keys -t "$SESSION" Enter
   fi
+  acknowledge_limit_modal "$boot_pane" || true
   sleep 2
 done
 
@@ -146,18 +171,67 @@ TAIL_PID=$!
 #   - tmux session dies (claude crashed)
 #   - bun server.ts dies (MCP channel server crashed; tmux/claude may be
 #     up but the bot can't receive Slack events without this)
+#   - Claude hits its usage/session limit (a "wedge": every process stays up
+#     but Claude is unresponsive). We mark the container unhealthy via a marker
+#     file the healthcheck fails on, and exit for a compose restart.
+#
+# It also narrates lifecycle to stdout (-> docker logs) so an operator can tell
+# a live-but-idle bot from a wedged one without reading the ANSI pane mirror.
 #
 # Give bun server.ts a few seconds to start up before we begin enforcing.
 sleep 30
+slog "liveness loop started — supervising tmux session '$SESSION' + bun server.ts"
+
+prev_activity=""
+wedged=false
+heartbeat_ticks=0
+HEARTBEAT_EVERY=30   # ~5 min at a 10s interval
 
 while tmux has-session -t "$SESSION" 2>/dev/null; do
   if ! pgrep -f "bun.*server.ts" >/dev/null 2>&1; then
-    echo "[slops] bun server.ts (the channel MCP) is no longer running — exiting so compose restarts the container"
+    slog "bun server.ts (the channel MCP) is no longer running — exiting so compose restarts the container"
     break
   fi
+
+  pane="$(tmux capture-pane -pt "$SESSION" 2>/dev/null || true)"
+
+  # Wedge detection: the usage/session-limit state. Act once, on first sight.
+  if [[ "$wedged" == false ]]; then
+    case "$pane" in
+      *"session limit"*|*"usage limit"*|*"hit your limit"*|*"wait for limit to reset"*|*"Stop and wait"*)
+        wedged=true
+        slog "WEDGE DETECTED: Claude session/usage limit — writing $WEDGED_MARKER, acknowledging modal, exiting for restart"
+        acknowledge_limit_modal "$pane" || true
+        printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) session-limit wedge" >"$WEDGED_MARKER" 2>/dev/null || true
+        break
+        ;;
+    esac
+  fi
+
+  # Lifecycle narration: derive busy/idle from the pane and log on transitions.
+  # "esc to interrupt" / a running-token line means Claude is actively working;
+  # the prompt box (│ >) with no working indicator means it is idle and ready.
+  activity="idle"
+  case "$pane" in
+    *"esc to interrupt"*|*"tokens ·"*|*"Running…"*|*"Thinking…"*) activity="busy" ;;
+  esac
+  if [[ "$activity" != "$prev_activity" ]]; then
+    case "$activity" in
+      busy) slog "session-busy — Claude is processing a message" ;;
+      idle) [[ -n "$prev_activity" ]] && slog "session-idle — Claude finished, awaiting next message" ;;
+    esac
+    prev_activity="$activity"
+  fi
+
+  heartbeat_ticks=$((heartbeat_ticks + 1))
+  if (( heartbeat_ticks >= HEARTBEAT_EVERY )); then
+    slog "alive — session '$SESSION' up, server.ts up, state=$activity"
+    heartbeat_ticks=0
+  fi
+
   sleep 10
 done
 
 kill "$TAIL_PID" 2>/dev/null || true
-echo "[slops] liveness loop exiting at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+slog "liveness loop exiting"
 exit 1

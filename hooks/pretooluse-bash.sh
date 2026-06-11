@@ -61,19 +61,26 @@ verdict="denied"
 allow=false
 
 # ---------------------------------------------------------------------------
-# HARD-DENY: the data-destruction class (the 2026-05-14 wipe line).
+# HARD-DENY: the catastrophic class.
 #
-# This runs FIRST, against the full pre-strip command_text, and short-circuits
-# before any allow logic. A deny here can never be undone by a later allow, and
-# scanning the whole string (not just argv0/argv1) is what catches the verb when
-# it is chained behind a benign command, e.g. `docker ps && docker volume rm x`.
+# These blocks run FIRST, against the full pre-strip command_text, and
+# short-circuit before any allow logic. A deny here can never be undone by a
+# later allow, and scanning the whole string (not just argv0/argv1) is what
+# catches the verb when it is chained behind a benign command, e.g.
+# `docker ps && docker volume rm x`.
 #
-# Refused outright — no allowlist verb rescues these:
-#   - any `-v` / `--volume(s)` flag (covers clusters: -v, -vf, -fv, --volumes)
-#   - docker volume rm | docker volume prune
-#   - docker system prune ... --volumes
-#   - dropdb
-# `docker compose down -v` and `docker rm -v` are caught by the -v scan above.
+# This is the second guard layer; settings.json `permissions.deny` is the first
+# (it fires even in bypassPermissions mode). Both intentionally cover the same
+# catastrophic set, so neither alone is load-bearing.
+#
+# The classes, each in its own block below:
+#   1. data-destruction (the 2026-05-14 wipe line): docker -v/--volume(s),
+#      volume rm|prune, system prune --volumes, dropdb
+#   2. filesystem-destruction: rm -rf on /, $HOME/~, or the dvl service roots
+#   3. destructive DB + trunk force-push: DROP DATABASE/TABLE, force-push or
+#      branch-delete of main/master
+#   4. secret-exfiltration: reading a credential/.env/key file straight into a
+#      network egress tool in one command
 # ---------------------------------------------------------------------------
 hard_deny=false
 case "$full_command" in
@@ -95,11 +102,101 @@ case "$full_command" in
   *dropdb*) hard_deny=true ;;
 esac
 
+# ---------------------------------------------------------------------------
+# HARD-DENY: filesystem-destruction class.
+#
+# `rm -rf` (any flag order: -rf, -fr, -r -f) aimed at a host root — `/`,
+# `$HOME`/`~`, or the dvl service roots — is the irrecoverable case. Anything
+# narrower (a scratch dir, a build artifact) is left to the allowlist, since
+# `rm` is not an allowed argv0 anyway and would be denied by default.
+# ---------------------------------------------------------------------------
+if [[ "$full_command" == *rm* ]]; then
+  recursive_force=false
+  for tok in $full_command; do
+    if [[ "$tok" == -[!-]* && "$tok" != --* && "$tok" == *r* && "$tok" == *f* ]]; then
+      recursive_force=true
+    fi
+  done
+  case "$full_command" in
+    *"-r "*"-f "*|*"-f "*"-r "*|*"--recursive"*"--force"*|*"--force"*"--recursive"*) recursive_force=true ;;
+  esac
+  if [[ "$recursive_force" == true ]]; then
+    # Strip quotes/tabs/newlines and collapse whitespace runs so a quoted or
+    # space-padded root target reduces to plain ` rm ... / ` tokens we can
+    # match without quote gymnastics. The deleted set is built via printf to
+    # keep the quoting unambiguous.
+    strip_set="$(printf '\t\n"%s' "'")"
+    normalized=" $(printf '%s' "$full_command" | tr -d "$strip_set") "
+    while [[ "$normalized" == *"  "* ]]; do normalized="${normalized//  / }"; done
+    case "$normalized" in
+      *" rm "*" / "|*" rm "*" /Users "*) hard_deny=true ;;
+    esac
+    # shellcheck disable=SC2016  # literal `$HOME`/`~` match is intended, no expansion
+    case "$normalized" in
+      *" rm "*' $HOME '*|*" rm "*' ~ '*|*" rm "*' ~/ '*|*" rm "*' $HOME/ '*) hard_deny=true ;;
+    esac
+    case "$full_command" in
+      *"/Users/superpea/dvl/win"*|*"/Users/superpea/dvl/traefik"*) hard_deny=true ;;
+      *"/Users/superpea/.seerr"*|*"/Users/superpea/.win"*) hard_deny=true ;;
+    esac
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# HARD-DENY: destructive DB and force-push class.
+#   - DROP DATABASE (any casing) issued through psql/sql one-liners
+#   - git push --force / -f / --force-with-lease onto main or master
+#   - git push origin --delete main|master (branch deletion of trunk)
+# A non-trunk feature-branch force-push stays allowed by the allowlist's
+# git verbs (push is not in the read-verb list, so it is denied by default
+# anyway — this block exists to make trunk force-push catastrophic, not just
+# unlisted).
+# ---------------------------------------------------------------------------
+case "$full_command" in
+  *"DROP DATABASE"*|*"drop database"*|*"DROP TABLE"*|*"drop table"*) hard_deny=true ;;
+esac
+if [[ "$full_command" == *"push"* && "$full_command" == *git* ]]; then
+  case "$full_command" in
+    *--force*|*" -f "*)
+      case "$full_command" in
+        *" main"*|*" master"*|*:main*|*:master*|*main:*|*master:*|*origin*) hard_deny=true ;;
+      esac
+      ;;
+  esac
+  case "$full_command" in
+    *"push"*--delete*main*|*"push"*--delete*master*|*"push"*:main|*"push"*:master) hard_deny=true ;;
+  esac
+fi
+
+# ---------------------------------------------------------------------------
+# HARD-DENY: secret-exfiltration class.
+#
+# Reading the contents of a credential / .env / private-key file and feeding
+# it to a network egress tool (curl/wget/nc/scp/...) in the SAME command is
+# the exfiltration shape we refuse. Inspecting a secret file on its own stays
+# allowed — the bot legitimately reads config — so the deny requires both a
+# local secret read (cat/grep/< redirect on a secret path) AND egress in the
+# one pipeline.
+# ---------------------------------------------------------------------------
+reads_secret=false
+case "$full_command" in
+  *"cat "*.env*|*"cat "*credential*|*"cat "*auth.json*|*"cat "*id_rsa*|*"cat "*id_ed25519*) reads_secret=true ;;
+  *"<"*.env*|*"<"*credential*|*"<"*auth.json*) reads_secret=true ;;
+  *"/.win/auth.json"*) reads_secret=true ;;
+esac
+if [[ "$reads_secret" == true ]]; then
+  case "$full_command" in
+    *curl*|*wget*|*" nc "*|*netcat*|*"/dev/tcp/"*|*scp*|*rsync*|*ncat*)
+      hard_deny=true
+      ;;
+  esac
+fi
+
 if [[ "$hard_deny" == true ]]; then
   if [[ -d /state/inbox ]]; then
     printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "hard-denied" "$preview" >>/state/inbox/hook.log 2>/dev/null || true
   fi
-  printf '[hook] denied (data-destruction class refused): %s\n' "$preview" >&2
+  printf '[hook] denied (catastrophic class refused): %s\n' "$preview" >&2
   exit 2
 fi
 
