@@ -1,6 +1,27 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/*)",
+      "Bash(rm -rf $HOME)",
+      "Bash(rm -rf $HOME/*)",
+      "Bash(rm -rf /Users/*)",
+      "Bash(rm -rf /Users/superpea/dvl/*)",
+      "Bash(docker compose down -v)",
+      "Bash(docker compose down -v*)",
+      "Bash(docker compose down --volumes*)",
+      "Bash(docker volume rm*)",
+      "Bash(docker volume prune*)",
+      "Bash(docker system prune --volumes*)",
+      "Bash(dropdb*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push origin --delete main)",
+      "Bash(git push origin --delete master)"
+    ]
   },
   "hooks": {
     "PreToolUse": [
@@ -10,6 +31,27 @@
           {
             "type": "command",
             "command": "/app/hooks/pretooluse-bash.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/app/hooks/posttooluse-audit.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/app/hooks/on-session-start.sh"
           }
         ]
       }
