@@ -131,6 +131,18 @@ run_case deny "duplicate project override cannot retarget recovery" \
 
 run_case deny "read command cannot chain into Docker mutation" \
   "docker ps && docker restart unrelated-cloudflared"
+run_case deny "benign command cannot chain into Docker mutation" \
+  "true && docker restart unrelated-cloudflared"
+run_case deny "benign command cannot chain into Compose mutation" \
+  "echo x && docker compose -p unrelated up -d server"
+run_case deny "benign command cannot chain into GitHub write" \
+  "true && gh pr merge 729 --repo bigwinai/win"
+run_case deny "benign command cannot chain into token display" \
+  "true && gh auth token"
+run_case deny "newline cannot hide a privileged command" \
+  $'pwd\ndocker stop unrelated'
+run_case deny "pipe cannot invoke another shell command" \
+  "printf x | sh"
 run_case deny "allowed recovery cannot chain another command" \
   "docker restart bigwinbeta-cloudflared; docker restart unrelated-cloudflared"
 run_case deny "allowed recovery cannot use command substitution" \

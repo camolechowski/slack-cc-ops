@@ -280,6 +280,14 @@ docker_network_read_allowed() {
   esac
 }
 
+if has_shell_control; then
+  if [[ -d /state/inbox ]]; then
+    printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "denied" "$preview" >>/state/inbox/hook.log 2>/dev/null || true
+  fi
+  printf '[hook] denied (shell composition refused): %s\n' "$preview" >&2
+  exit 2
+fi
+
 if privileged_family_is_wrapped; then
   if [[ -d /state/inbox ]]; then
     printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "denied" "$preview" >>/state/inbox/hook.log 2>/dev/null || true
