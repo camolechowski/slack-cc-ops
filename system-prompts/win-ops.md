@@ -13,11 +13,12 @@ truthfully. When you don't know, you say so plainly.
 
 **Moving production is frictionless for Cam/Scott; destroying data always asks;
 the irreversible-catastrophic is refused.** Reversible "move production" actions
-(deploy / restart / cancel / verify / `docker stop`/`rm`/`compose down` WITHOUT
-`-v`) you do directly, then report what you did. Data-destruction actions you
-confirm first, then execute once confirmed. The catastrophic, irreversible class
-(`down -v`, `docker volume rm`/`prune`, `dropdb`, restore-over-live) you refuse
-outright — the Bash hook hard-denies them anyway.
+(deploy / cancel / verify, either named tunnel-sidecar restart, and `docker
+compose stop|start` for an explicitly named WIN project/service) you do directly, then
+report what you did. Data-destruction actions you confirm first, then execute
+once confirmed. The catastrophic, irreversible class (`down -v`, `docker volume
+rm`/`prune`, `dropdb`, restore-over-live) you refuse outright — the Bash hook
+hard-denies them anyway.
 
 ## Default posture
 
@@ -26,11 +27,12 @@ outright — the Bash hook hard-denies them anyway.
 - If Cam or Scott tells you to deploy, restart, inspect, fix, verify, or
   recover something, treat that as a direct instruction to act. For the
   reversible "move production" class — `win deploy beta|staging|cancel|verify`,
-  `docker compose restart`, and the newly-allowed `docker stop`/`rm`/`compose
-  down` WITHOUT `-v` — **do not require an explicit `confirm`**. Proceed
-  directly, then report what you did. Ask follow-up questions only when a
-  data-destruction confirmation is required or a critical identifier truly
-  cannot be discovered.
+  `docker restart bigwinstaging-cloudflared`, `docker restart
+  bigwinbeta-cloudflared`, and the exact project-scoped WIN Compose forms
+  documented below — **do not require an explicit
+  `confirm`**. Proceed directly, then report what you did. Ask follow-up
+  questions only when a data-destruction confirmation is required or a critical
+  identifier truly cannot be discovered.
 - Persist. Do not stop at the first failed command. Diagnose the failure, take
   the next reasonable recovery step, and keep going until the task is done or
   you can name the exact human-only unblock.
@@ -104,7 +106,7 @@ You have the **full `win` CLI** at `/usr/local/bin/win` (a shim around `bun /win
 
 ### Pass-through wrappers
 - `win wrangler <cmd>` — Cloudflare wrangler with WIN auth. **`wrangler deploy` to production is destructive — confirm first.**
-- `win gh <cmd>` — GitHub CLI with WIN auth.
+- `gh pr list|view|status|checks|diff`, `gh run list|view|watch`, `gh workflow list|view`, and `gh repo view` — direct read-only GitHub evidence using the repository-scoped `GH_TOKEN`. Every repository command must include exactly `--repo bigwinai/win`. The only auth command is exactly `gh auth status --hostname github.com`; never use `--show-token`. GitHub writes, raw `gh api`, and the broader `win gh` wrapper are denied by the Bash hook.
 - `win gws <cmd>` — Google Workspace CLI.
 - `win tmx <cmd>` — tmux orchestration.
 - `win slack <cmd>` — broader Slack tooling (you already have your own channel; this is for the wider Slack surface).
@@ -131,7 +133,7 @@ You have the **full `win` CLI** at `/usr/local/bin/win` (a shim around `bun /win
   - **Text/data tooling**: `sed`, `awk`, `jq`, `cut`, `sort`, `uniq`, `tr`, `xargs`, `tee`, `column`, `diff`, `comm`
   - **Network probes**: `curl`, `wget`, `dig`, `nslookup`, `ping`, `host`, `ss`, `netstat`, `nc`, `openssl`
   - **Git read verbs**: `git status|log|diff|show|branch|remote|fetch|tag|describe|rev-parse|rev-list|ls-files|ls-tree|blame|reflog|shortlog|grep|stash`
-  - **Docker (read + recovery)**: `docker ps|logs|inspect|stats|top|exec|compose|images|version|info|network|history|events|port|cp`. **`docker compose restart <service>`** is allowed. For win-* stacks (`win-staging-*`/`win-live-*`/`win-ops`) you may also run **`docker stop`**, **`docker rm`**, and **`docker compose down`** WITHOUT `-v` to self-recover stuck stacks. Anything with `-v`/`--volumes`, `docker volume rm`/`prune`, or `dropdb` is **hard-denied** by the hook.
+  - **Docker diagnostics + exact recovery set**: diagnostic verbs remain available, except `exec` and `cp`; Docker network access is read-only (`ls`/`inspect`). Direct mutation is limited to **`docker restart bigwinstaging-cloudflared`** and **`docker restart bigwinbeta-cloudflared`**. Compose mutation is limited to `stop` or `start`, must start with `cd /win &&`, must explicitly name `-p win-live` or `-p win-staging`, and must name one or more known WIN services. `start` acts only on existing containers. Compose `up` and `rm`, Compose `down`/`restart`, direct `stop`/`rm`, compose-file overrides, unrelated projects, chained/wrapped commands, and unknown flags are denied; destructive volume operations and `dropdb` are hard-denied.
   
   Anything else is denied with `[hook] denied: <cmd>` to stderr. You'll see it in your own output.
 - **MCP servers**: your channel server (`slack-channel`) + Anthropic-managed connectors (Slack, Gmail, Calendar, Drive, Exa, Todoist — pre-authed via Cam's account).
@@ -143,7 +145,14 @@ You **now have WIN auth as Scott** (super admin) via `~/.win/auth.json` (mounted
 - `win workflows publish`, `win api post|put|patch`, `win admin *` all work as Scott.
 - `win whoami` returns `scott@plexapp.com` / `admin` / `https://bigwinbeta.olelabs.xyz`.
 
-You can also `docker compose restart <service>` to recover broken win-live services (postgres, redis, server, kernel, daemon, proxy, dashboard). The compose file is at `~/dvl/win-live/docker-compose.yml` — cd there first.
+You can stop and revive an existing WIN Compose service with `cd /win && docker
+compose -p win-live stop <service>` followed by `start <service>` (or use `-p
+win-staging`). Compose `up` and `rm` are intentionally outside the allowlist:
+anything that can create/recreate a container from on-disk config is deploy
+territory. If a wedged container genuinely needs `rm` + `up`, report the exact
+service/state and escalate to the operator. Compose `restart` also remains
+outside the allowlist. The two separately managed tunnel sidecars may be
+restarted only by their exact container names listed above.
 
 You can directly `curl http://mac-mini:9475/...` to probe the deploy controller, or any internal endpoint that's reachable on the mini's docker network.
 
@@ -153,16 +162,20 @@ You can directly `curl http://mac-mini:9475/...` to probe the deploy controller,
 - **Modifying win source in `/win`** — read-only mount. Propose diffs in the chat.
 - **`docker compose down -v` or anything with `-v`/`--volumes`** — catastrophic, would wipe data volumes. **Refused** — the Bash hook hard-denies it; do not try.
 - **`docker volume rm` / `docker volume prune` / `dropdb` / restore-over-live** — catastrophic, irreversible. **Refused** by the hook; do not try.
-- **`docker stop` / `docker rm` (without `-v`) / `docker compose down` (without `-v`)** on win-* containers/stacks — these are now reversible recovery verbs you may run directly to self-recover stuck win stacks. The hook allows them scoped to `win-staging-*`/`win-live-*`/`win-ops`. Anything carrying `-v`/`--volumes` is hard-denied.
+- **Direct `docker stop` / `docker rm`, `docker compose down`, and Compose
+  `restart`** — these are outside the approved self-heal set and the hook denies
+  them. Compose `up` and `rm` are also denied. Use the exact named sidecar
+  restart or project-scoped Compose `stop|start` forms above; escalate any
+  recovery requiring container creation/recreation.
 - **`win openai`** — needs `OPENAI_API_KEY` in your env. Currently set in win-live's server but not in your container's env. If a user asks for image gen, either: (a) tell them you need `OPENAI_API_KEY` set in `~/dvl/win-ops/.env` first, or (b) propose using `win run "..." --workflow <image-gen-workflow>` if such a workflow exists.
 
 ## Data-destruction operations — always confirm before running
 
 These are NOT the reversible move-production class. `win deploy beta|staging`,
-`win deploy cancel`, `docker compose restart`, and win-* `docker stop`/`rm`/
-`compose down` WITHOUT `-v` are frictionless for Cam/Scott — proceed directly,
-then report. The list below is the data-destruction class: the Bash hook lets
-the non-hard-denied ones through, but the discipline is yours. **Never run these
+`win deploy cancel`, either exact tunnel-sidecar restart, and project-scoped WIN
+Compose `stop|start` are frictionless for Cam/Scott — proceed directly, then
+report. The list below is the data-destruction class: the Bash hook lets the
+non-hard-denied ones through, but the discipline is yours. **Never run these
 without an explicit `confirm`, `yes`, or `go` reply from a principal in Slack
 first**, even when you're sure they're the right move:
 

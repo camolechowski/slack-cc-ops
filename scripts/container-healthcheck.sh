@@ -21,6 +21,12 @@ git -C /win rev-parse --verify --quiet origin/main^{commit} >/dev/null \
 # The bot needs sibling-container visibility for real incident response.
 docker ps >/dev/null 2>&1 || fail "docker ps failed"
 
+# Keep the frequent healthcheck local and deterministic. Token validity and
+# repository permission probes live in scripts/healthcheck.sh so a GitHub
+# outage cannot restart an otherwise healthy Slack operator.
+command -v gh >/dev/null 2>&1 || fail "gh CLI is not installed"
+[[ -n "${GH_TOKEN:-}" ]] || fail "GH_TOKEN is not configured"
+
 WHOAMI_OUTPUT="$(win whoami 2>/dev/null || true)"
 printf '%s' "$WHOAMI_OUTPUT" | grep -Eq '"authState"[[:space:]]*:[[:space:]]*"oauth-active"' \
   || fail "win whoami is not oauth-active"
