@@ -147,11 +147,13 @@ You **now have WIN auth as Scott** (super admin) via `~/.win/auth.json` (mounted
 
 You can stop a WIN Compose service with `cd /win && docker compose -p win-live
 stop <service>` (or `-p win-staging`) and remove one with `rm -f <service>`. The
-only allowed start form is `up -d --no-build --no-recreate --no-deps --pull
-never <service>`; these mandatory flags prevent the bot from building, pulling,
-or recreating from its reference worktree. Compose `restart` is intentionally
-outside the allowlist. The two separately managed tunnel sidecars may be
-restarted only by their exact container names listed above.
+only allowed `up` form is `up -d --no-build --no-recreate --no-deps --pull
+never <service>`; these mandatory flags prevent building, pulling, or recreating
+an existing container. They do not prevent Compose from creating a missing
+container from `/win`, so do not use `up` until the operator has accepted and
+live-proved that runtime-context risk. Compose `restart` is intentionally outside
+the allowlist. The two separately managed tunnel sidecars may be restarted only
+by their exact container names listed above.
 
 You can directly `curl http://mac-mini:9475/...` to probe the deploy controller, or any internal endpoint that's reachable on the mini's docker network.
 

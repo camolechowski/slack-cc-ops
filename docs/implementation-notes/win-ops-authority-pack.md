@@ -26,7 +26,7 @@ Read the CTO's five rails, this repo's `AGENTS.md` and `CLAUDE.md`, the current 
 
 #### Design decisions
 - **Two direct-restart targets only:** Permit `docker restart bigwinstaging-cloudflared` and `docker restart bigwinbeta-cloudflared`. Do not generalize by prefix/glob and do not grant direct `docker stop` or `docker rm`.
-- **Explicit Compose project and start-only grammar:** Permit mutating Compose verbs `up`, `stop`, and `rm` only from `/win` when global `-p`/`--project-name` identifies `win-live` or `win-staging` and every service is from the known WIN set. `up` requires `-d --no-build --no-recreate --no-deps --pull never`; this cannot build, pull, or recreate from the stale reference worktree.
+- **Explicit Compose project and restricted `up` grammar:** Permit mutating Compose verbs `up`, `stop`, and `rm` only from `/win` when global `-p`/`--project-name` identifies `win-live` or `win-staging` and every service is from the known WIN set. `up` requires `-d --no-build --no-recreate --no-deps --pull never`; this cannot build, pull, or recreate an existing container, but may create a missing one from stale `/win` config.
 - **Deny other Compose mutations:** Preserve a small read-only Compose set, but deny `down`, `restart`, `kill`, `start`, `create`, `build`, `pull`, and other mutations even on a WIN project because they are outside the ratified self-heal set.
 - **Reject wrappers and composition on privileged paths:** A Docker or GitHub command containing wrapper, shell control, redirection, or substitution syntax is denied. The sole leading `cd /win &&` exception exists only for project-scoped Compose parsing.
 - **Named token contract, never material:** Declare only `GH_TOKEN=` and its fine-grained, repository-scoped read permissions: Metadata, Pull requests, and Actions for `bigwinai/win`. Contents permission was considered and removed because the approved diagnostics do not need it. The value is operator-owned and must never appear in source, tests, logs, diffs, or PR text.
@@ -35,10 +35,10 @@ Read the CTO's five rails, this repo's `AGENTS.md` and `CLAUDE.md`, the current 
 
 #### Deviations from spec
 - **Pre-existing diagnostics narrowed:** Exact lifecycle authorization was bypassable through `docker exec`, `docker cp`, unrestricted Docker network verbs, wrapper utilities, raw Docker-socket `curl`, and `win gh`. These pre-existing surfaces were narrowed or denied in the same gate change because leaving them open would make the stated specific-set boundary false.
-- **Compose activation proof deferred:** The task explicitly forbids host access, and `/win` is a reference worktree rather than either active runtime checkout. Local tests therefore prove the parser and denial boundary only; the operator activation drill must prove that the mandatory start-only form resolves an existing stopped service without recreating it.
+- **Compose activation proof deferred:** The task explicitly forbids host access, and `/win` is a reference worktree rather than either active runtime checkout. Local tests prove the parser and denial boundary only. `--no-recreate` does not stop Compose from creating an absent container (including after allowed `rm -f`), so operator disposition is required before activation rather than treating the flags as a complete runtime boundary.
 
 #### Tradeoffs considered
-- **Project flag plus trusted reference directory:** A project flag alone can retarget an attacker-supplied Compose file. The policy requires both exact `/win` working directory and exact project identity, rejects all Compose file/env overrides, and makes `up` start-only. This is locally proven at the hook boundary; live Compose resolution is explicitly deferred to the operator activation drill.
+- **Project flag plus trusted reference directory:** A project flag alone can retarget an attacker-supplied Compose file. The policy requires both exact `/win` working directory and exact project identity and rejects all Compose file/env overrides. The remaining missing-container creation risk is explicit and unresolved; it is not mislabeled as start-only.
 - **Continuous GitHub API health vs operator audit:** A 30-second Docker healthcheck that depends on GitHub availability would restart a healthy Slack operator during an external outage. Contract presence belongs in liveness; token validity/scope belongs in the deeper manual audit.
 
 #### Open questions
@@ -47,7 +47,7 @@ Read the CTO's five rails, this repo's `AGENTS.md` and `CLAUDE.md`, the current 
 
 #### Footguns and gotchas
 - Canonical PR #2 previously made all Compose subcommands except `down` allow-all. This slice intentionally removes that overbroad behavior; preserving it would not satisfy #711's specific-set acceptance.
-- `/win` is a stale reference worktree, not either active host runtime checkout. The mandatory `--no-build --no-recreate --pull never` grammar prevents it from changing images or container definitions; whether Compose can resolve and start an existing stopped service from that context is not locally provable and must be tested fail-closed during operator activation. A mount of runtime `.env` or other credential-bearing paths was explicitly rejected.
+- `/win` is a stale reference worktree, not either active host runtime checkout. The mandatory `--no-build --no-recreate --pull never` grammar blocks build/pull/recreation of an existing container, but an absent service may still be created from stale config. A mount of runtime `.env` or other credential-bearing paths was explicitly rejected; a brokered active-runtime path is the safer unresolved alternative.
 - `env_file: .env` already passes `GH_TOKEN` into the container, so no Compose interpolation or secret value belongs in `docker-compose.yml`.
 - `docker compose rm` may use `-f`/`--stop`; those flags are permitted, but all volume flags remain hard-denied before allow logic.
 - No local test may call Docker, GitHub, Slack, or the Mac mini. Hook tests feed synthetic Claude PreToolUse JSON to the script.
