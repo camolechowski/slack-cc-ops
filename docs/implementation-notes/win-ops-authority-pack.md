@@ -9,12 +9,47 @@ related: [claude-config-layer, container-infrastructure]
 # WinOps Authority Pack
 
 ## Summary
-This workstream narrows the slops Bash gate to the exact WIN self-heal authority approved in issue #711 and declares the read-only `GH_TOKEN` contract needed for GitHub deploy/PR diagnostics. The implementation is local-only on `uat/stab-win-ops-authority` from canonical `origin/master` `1ab2128`; no token value, host access, container recreate, deploy, merge, or live validation is part of this slice. Before the canonical PR is marked ready, the exact gate/env/health/test diff must receive operator review and then cross-family L2 review.
+This workstream narrows the slops Bash gate to the exact WIN self-heal authority approved in issue #711 and declares the read-only `GH_TOKEN` contract needed for GitHub deploy/PR diagnostics. Final operator direction limits recovery to two named sidecar restarts plus Compose `stop`/`start` of existing WIN containers; `up` and `rm` are operator-gated. The implementation is local-only on `uat/stab-win-ops-authority`; no token value, host access, container create/recreate, deploy, merge, or live validation is part of this slice.
 
 ## Current open questions
-- [ ] Does the operator accept the exact pre-PR-ready security diff after local gates, or require a narrower command spelling/project set?
+- [x] ~~Does the operator accept the exact pre-PR-ready security diff after local gates, or require a narrower command spelling/project set?~~ → Narrow to direct named-sidecar restart plus Compose `stop`/`start`; deny `up`/`rm`, decided 2026-07-10.
 
 ## Sessions
+
+### 2026-07-10 - session `20260710-c11a1cc-s3d` (agent: codex)
+**Branch / working tree:** `uat/stab-win-ops-authority` / fresh isolated clone `scratchpad/clone-stab-s3-slops`
+**Spec ref:** bigwinai/win issue #711, Slice 3 CTO security ruling after L2
+**Files touched:** `hooks/pretooluse-bash.sh`, `hooks/pretooluse-bash.test.sh`, `system-prompts/win-ops.md`, `AGENTS.md`, this note
+
+#### Context loaded
+Read the final issue #711 ruling after capped cross-family L2 passed at `c11a1cc`. The ruling rejects both accepting stale-config creation risk and building a broker: self-heal may stop/start existing WIN containers only; `up` and `rm` stay operator-gated.
+
+#### Design decisions
+- **Existing-container verbs only:** Compose mutation is exactly `stop` and `start`, with the existing `/win`, project, and known-service checks. `start` does not create a missing container.
+- **Creation/removal escalates:** Compose `up` and `rm` are denied regardless of flags/project. A rare wedged-container repair that needs `rm` + `up` is a human escalation, not bot self-heal.
+- **Preserve the reviewed surrounding boundary:** Named sidecars, read-only GitHub grammar, global shell-composition denial, project/service pinning, and catastrophic hard-denies remain unchanged.
+
+#### Deviations from spec
+- **Final verb set is narrower than the original issue shorthand:** The earlier `up/stop/rm` shorthand was superseded by the operator's explicit post-review ruling because `up` can create from stale `/win` config.
+
+#### Tradeoffs considered
+- **Manual rare recovery vs silent stale resurrection:** Accept the human escalation for wedged containers. It costs a manual rescue only when removal/recreation is truly needed and prevents the bot from silently instantiating stale protected-production config.
+
+#### Open questions
+- None for implementation; operator must review the final diff before PR #5 leaves draft.
+
+#### Footguns and gotchas
+- `docker compose start` requires the target container to exist; failure is the intended escalation signal, not a reason to fall back to `up`.
+- The bot must never translate a failed `start` into `rm`/`up`; the prompt now says to report the exact service/state and escalate.
+
+#### What shipped this session
+- Hook/parser and runtime prompt now grant only named-sidecar restart plus project/service-scoped Compose `stop`/`start`; Compose `up` and `rm` are denied for every project/flag combination.
+- `bun run check` exits 0 at the working diff: 19 existing Bun tests, 64 hook cases, 11 authority-contract checks, and Bash syntax for every hook/operator script.
+- Focused adversarial re-review returned PASS after directly reproducing allowed start/stop (including multi-service/timeout) and denied old/new `up`, `rm`, unknown service/project/flag, and WIN-app restart forms.
+- `git diff --check` is clean. Final draft packaging/operator diff review remain.
+
+#### What's next
+- Commit/push the final ruled verb set, update the PR body and WIN tracking PR, and show the exact PR #5 diff while keeping it draft for operator review.
 
 ### 2026-07-10 - session `20260710-1ab2128-s3a` (agent: codex)
 **Branch / working tree:** `uat/stab-win-ops-authority` / fresh isolated clone `scratchpad/clone-stab-s3-slops`

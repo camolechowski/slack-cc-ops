@@ -45,24 +45,28 @@ run_case deny "WIN application container restart" \
 run_case deny "extra restart target" \
   "docker restart bigwinbeta-cloudflared unrelated-cloudflared"
 
-run_case allow "live compose up from trusted mount" \
-  "cd /win && docker compose -p win-live up -d --no-build --no-recreate --no-deps --pull never server"
+run_case allow "live compose start from trusted mount" \
+  "cd /win && docker compose -p win-live start server"
 run_case allow "staging compose stop from trusted mount" \
   "cd /win && docker compose --project-name win-staging stop server"
-run_case allow "live compose rm from trusted mount" \
+run_case deny "compose rm is always operator-gated" \
   "cd /win && docker compose --project-name=win-live rm -f server"
 run_case deny "compose mutation without trusted mount" \
-  "docker compose -p win-live up -d --no-build --no-recreate --no-deps --pull never server"
+  "docker compose -p win-live start server"
 run_case deny "compose mutation without project" \
-  "cd /win && docker compose up -d --no-build --no-recreate --no-deps --pull never server"
+  "cd /win && docker compose start server"
 run_case deny "compose mutation for unrelated project" \
   "cd /win && docker compose -p slops stop server"
 run_case deny "compose file override" \
-  "cd /win && docker compose -f /state/scratch/compose.yml -p win-live up -d --no-build --no-recreate --no-deps --pull never server"
+  "cd /win && docker compose -f /state/scratch/compose.yml -p win-live start server"
 run_case deny "compose restart remains outside self-heal set" \
   "cd /win && docker compose -p win-live restart server"
 run_case deny "compose down remains outside self-heal set" \
   "cd /win && docker compose -p win-live down"
+run_case deny "compose up is always operator-gated" \
+  "cd /win && docker compose -p win-live up server"
+run_case deny "compose start rejects flags" \
+  "cd /win && docker compose -p win-live start --wait server"
 run_case deny "direct stop remains outside self-heal set" \
   "docker stop win-live-server-1"
 run_case deny "direct rm remains outside self-heal set" \
@@ -127,7 +131,7 @@ run_case deny "compose up requires an explicit service" \
 run_case deny "compose up rejects an unknown service" \
   "cd /win && docker compose -p win-live up -d --no-build --no-recreate --no-deps --pull never attacker"
 run_case deny "duplicate project override cannot retarget recovery" \
-  "cd /win && docker compose -p win-live --project-name unrelated up -d --no-build --no-recreate --no-deps --pull never server"
+  "cd /win && docker compose -p win-live --project-name unrelated start server"
 
 run_case deny "read command cannot chain into Docker mutation" \
   "docker ps && docker restart unrelated-cloudflared"
@@ -144,7 +148,7 @@ run_case deny "background command cannot chain into token display" \
 run_case deny "background command cannot chain into Docker mutation" \
   "docker ps & docker restart unrelated-cloudflared"
 run_case deny "background command cannot chain into Compose mutation" \
-  "echo x & docker compose -p win-live rm -f server"
+  "echo x & docker compose -p win-live start server"
 run_case deny "newline cannot hide a privileged command" \
   $'pwd\ndocker stop unrelated'
 run_case deny "pipe cannot invoke another shell command" \

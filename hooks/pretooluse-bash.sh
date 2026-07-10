@@ -150,12 +150,6 @@ compose_subcommand_allowed() {
   local token=""
   local verb=""
   local service_count=0
-  local saw_detach=false
-  local saw_no_build=false
-  local saw_no_recreate=false
-  local saw_no_deps=false
-  local saw_pull_never=false
-  local saw_force=false
 
   read -r -a words <<<"$command_text"
   while [[ "$index" -lt "${#words[@]}" ]]; do
@@ -186,7 +180,7 @@ compose_subcommand_allowed() {
     ps|logs|config|images|top|events|ls|version|port)
       return 0
       ;;
-    up|stop|rm)
+    start|stop)
       [[ "$working_dir" == "/win" ]] || return 1
       case "$project" in
         win-live|win-staging) ;;
@@ -200,22 +194,10 @@ compose_subcommand_allowed() {
   while [[ "$index" -lt "${#words[@]}" ]]; do
     token="${words[$index]}"
     case "$verb:$token" in
-      up:-d|up:--detach) saw_detach=true ;;
-      up:--no-build) saw_no_build=true ;;
-      up:--no-recreate) saw_no_recreate=true ;;
-      up:--no-deps) saw_no_deps=true ;;
-      up:--pull)
-        index=$((index + 1))
-        [[ "$index" -lt "${#words[@]}" && "${words[$index]}" == "never" ]] || return 1
-        saw_pull_never=true
-        ;;
-      up:--pull=never) saw_pull_never=true ;;
       stop:-t|stop:--timeout)
         index=$((index + 1))
         [[ "$index" -lt "${#words[@]}" && "${words[$index]}" =~ ^[0-9]+$ ]] || return 1
         ;;
-      rm:-f|rm:--force) saw_force=true ;;
-      rm:-s|rm:--stop) ;;
       *:postgres|*:redis|*:minio|*:minio-init|*:server|*:kernel|*:daemon|*:proxy|*:dashboard)
         service_count=$((service_count + 1))
         ;;
@@ -225,13 +207,7 @@ compose_subcommand_allowed() {
   done
 
   [[ "$service_count" -gt 0 ]] || return 1
-  case "$verb" in
-    up)
-      [[ "$saw_detach" == true && "$saw_no_build" == true && "$saw_no_recreate" == true && "$saw_no_deps" == true && "$saw_pull_never" == true ]]
-      ;;
-    stop) return 0 ;;
-    rm) [[ "$saw_force" == true ]] ;;
-  esac
+  return 0
 }
 
 gh_read_allowed() {
