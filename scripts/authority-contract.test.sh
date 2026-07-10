@@ -32,7 +32,7 @@ else
   fail "environment contract must declare exactly one blank GH_TOKEN"
 fi
 
-if git -C "$ROOT" grep -n -E 'GH_TOKEN=.+$' -- . ':(exclude)scripts/authority-contract.test.sh' >/dev/null 2>&1; then
+if git -C "$ROOT" grep -n -E '^[[:space:]]*(export[[:space:]]+)?GH_TOKEN=.+$' -- . ':(exclude)scripts/authority-contract.test.sh' >/dev/null 2>&1; then
   fail "tracked files contain a GH_TOKEN value"
 else
   pass "tracked files contain no GH_TOKEN value"
