@@ -32,7 +32,8 @@ Tonight (2026-05-23) we got the full Slack ↔ Bolt ↔ Claude Code ↔ `win` CL
 │       │            reply/react/edit_message/etc. tools)               │
 │       ├─ mounts: ./.win-ops→/state, ./win→/win:ro, /var/run/docker.sock │
 │       └─ env: SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET, │
-│              WIN_DEPLOY_CONTROLLER_TOKEN, HOST_DOCKER_GID, etc.       │
+│              WIN_DEPLOY_CONTROLLER_TOKEN, GH_TOKEN, HOST_DOCKER_GID,  │
+│              etc.                                                     │
 │                                                                       │
 │  Sibling compose projects (not ours):                                 │
 │   ├─ win-live      (the beta runtime — bigwinbeta.olelabs.xyz)        │

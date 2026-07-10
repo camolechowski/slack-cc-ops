@@ -9,7 +9,10 @@
   "type": "module",
   "bin": "./server.ts",
   "scripts": {
-    "start": "bun install --no-summary && bun server.ts"
+    "start": "bun install --no-summary && bun server.ts",
+    "test": "bun test && bash hooks/pretooluse-bash.test.sh && bash scripts/authority-contract.test.sh",
+    "check:shell": "bash -n hooks/*.sh scripts/*.sh",
+    "check": "bun run test && bun run check:shell"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
