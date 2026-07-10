@@ -57,8 +57,9 @@ Read the CTO's five rails, this repo's `AGENTS.md` and `CLAUDE.md`, the current 
 - Implemented an exact two-sidecar restart allowlist and project/service/flag-aware Compose parser; all other lifecycle mutations fail closed.
 - Added repository-pinned read-only `gh` verbs, exact token-redacted auth status, and explicit denials for writes, raw API, other repositories, `win gh`, and common wrapper/chaining bypasses.
 - Added the blank `GH_TOKEN` least-privilege contract, cheap container presence checks, and operator-only live PR/Actions access probes without exposing a value.
-- Added one repo-local `bun run check` gate covering 19 existing Bun tests, 59 synthetic hook cases, 11 authority-contract checks, and Bash syntax for every hook/operator script. The gate exits 0 locally.
+- Added one repo-local `bun run check` gate covering 19 existing Bun tests, 62 synthetic hook cases, 11 authority-contract checks, and Bash syntax for every hook/operator script. The gate exits 0 locally.
 - Cross-family L2 Round 1 returned BLOCK on benign-lead compound-command bypasses. The global composition gate and six direct regressions close that specific P0; Round 2 re-review is required before PR-ready.
+- Cross-family L2 Round 2 found the same P0 class still reachable through a lone background `&`. The global predicate now rejects any `&`, and three regressions cover token display, direct Docker restart, and Compose mutation behind that separator. Round 3 is the gate-contract cap.
 - An exploratory ad-hoc TypeScript command was not green: this repo has no `tsconfig`, typecheck script, or lockfile, and the resolver selected TypeScript 7.0.2 plus current caret dependencies; diagnostics are in unchanged `gate.test.ts`/`server.ts`. This is recorded as non-gate evidence rather than misreported as a passing check.
 
 #### What's next

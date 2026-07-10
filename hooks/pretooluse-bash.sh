@@ -113,7 +113,7 @@ read -r argv0 argv1 _ <<<"$command_text"
 
 has_shell_control() {
   case "$command_text" in
-    *$'\n'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'`'*|*'$('* ) return 0 ;;
+    *$'\n'*|*';'*|*'&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'`'*|*'$('* ) return 0 ;;
     *) return 1 ;;
   esac
 }
